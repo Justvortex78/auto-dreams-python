@@ -1,60 +1,66 @@
+# main.py (исправленный)
 import sys
 import os
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QPushButton, QLabel, QMessageBox, QStackedWidget, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit, QSpinBox,
-    QScrollArea, QGridLayout, QComboBox
-)
-from PySide6.QtGui import QFont, QPixmap, QColor
-from auth_db import init_db, create_user, find_user_by_login_or_email, verify_password
-from car_db import (get_all_cars, get_available_cars, get_client_orders, add_review,
-                   get_client_reviews, create_order, get_or_create_client_for_user,
-                   get_available_employee, add_car, update_car, delete_car, get_car_by_id)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                             QLabel, QPushButton, QLineEdit, QTextEdit, QStackedWidget, 
+                             QScrollArea, QGridLayout, QMessageBox, QTableWidget, QTableWidgetItem,
+                             QHeaderView, QFormLayout, QSpinBox, QFrame, QDialog, QScrollBar, QSizePolicy)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap, QColor, QFont
 
-# Цветовая палитра с зелеными акцентами
+# Импортируем также get_conn для realtime stats
+from auth_db import init_db, create_user, find_user_by_login_or_email, verify_password, get_conn
+from car_db import (get_available_cars, get_all_cars, get_client_orders, add_review, 
+                   get_client_reviews, create_order, get_or_create_client_for_user, 
+                   get_available_employee, add_car, update_car, delete_car, get_car_by_id, init_car_db)
+
 COLORS = {
-    'primary_bg': '#0f1117',
-    'secondary_bg': '#1a1d29',
+    'primary_bg': '#0f172a',
+    'secondary_bg': '#1e293b',
     'accent_green': '#10b981',
     'accent_teal': '#0d9488',
     'text_primary': '#f1f5f9',
     'text_secondary': '#94a3b8',
-    'success': '#10b981',
-    'danger': '#ef4444',
-    'border': '#334155'
+    'border': '#334155',
+    'success': '#22c55e',
+    'danger': '#ef4444'
 }
 
-class Line(QWidget):
+class Line(QFrame):
     def __init__(self):
         super().__init__()
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet(f"background-color: {COLORS['accent_green']}; height: 2px;")
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 8, 0, 8)
-        lay.addWidget(line)
+        self.setFrameShape(QFrame.HLine)
+        self.setFrameShadow(QFrame.Sunken)
+        self.setStyleSheet(f"background-color: {COLORS['accent_green']}; margin: 10px 0;")
 
-class RegisterPage(QWidget):
-    def __init__(self, go_login):
+class LoginPage(QWidget):
+    def __init__(self, on_login_success, go_register):
         super().__init__()
-        self.go_login = go_login
+        self.on_login_success = on_login_success
+        self.go_register = go_register
         self.setup_ui()
 
     def setup_ui(self):
         self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(100, 50, 100, 50)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 40, 40, 40)
         
-        title = QLabel("РЕГИСТРАЦИЯ")
+        title = QLabel("AUTO DREAMS")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(f"""
-            font-size: 28px;
+            font-size: 48px;
             font-weight: bold;
             color: {COLORS['accent_green']};
-            margin-bottom: 30px;
+            margin-bottom: 10px;
+            font-family: 'Segoe UI';
+        """)
+        
+        subtitle = QLabel("ПРЕМИАЛЬНЫЕ АВТОМОБИЛИ")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet(f"""
+            font-size: 20px;
+            color: {COLORS['accent_teal']};
+            margin-bottom: 40px;
             font-family: 'Segoe UI';
         """)
         
@@ -63,64 +69,63 @@ class RegisterPage(QWidget):
             background-color: {COLORS['secondary_bg']};
             border: 2px solid {COLORS['accent_green']};
             border-radius: 15px;
-            padding: 30px;
+            padding: 40px;
         """)
-        form_layout = QFormLayout(form_container)
-        form_layout.setSpacing(20)
+        form_layout = QVBoxLayout(form_container)
         
-        self.username_edit = QLineEdit()
-        self.username_edit.setPlaceholderText("Введите логин (мин. 3 символа)")
-        self.email_edit = QLineEdit()
-        self.email_edit.setPlaceholderText("Введите email")
-        self.pass1_edit = QLineEdit()
-        self.pass1_edit.setPlaceholderText("Введите пароль (мин. 6 символов)")
-        self.pass2_edit = QLineEdit()
-        self.pass2_edit.setPlaceholderText("Повторите пароль")
+        form_title = QLabel("ВХОД В СИСТЕМУ")
+        form_title.setAlignment(Qt.AlignCenter)
+        form_title.setStyleSheet(f"""
+            font-size: 24px;
+            font-weight: bold;
+            color: {COLORS['accent_green']};
+            margin-bottom: 30px;
+            font-family: 'Segoe UI';
+        """)
         
-        input_style = f"""
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Логин или Email")
+        self.username_input.setStyleSheet(f"""
             QLineEdit {{
-                background-color: {COLORS['secondary_bg']};
+                background-color: {COLORS['primary_bg']};
                 color: {COLORS['text_primary']};
-                padding: 12px;
-                border: 2px solid {COLORS['border']};
+                padding: 15px;
+                border: 1px solid {COLORS['border']};
                 border-radius: 8px;
-                font-size: 14px;
-                margin: 5px 0;
+                font-size: 16px;
                 font-family: 'Segoe UI';
             }}
             QLineEdit:focus {{
                 border-color: {COLORS['accent_green']};
-                background-color: {COLORS['secondary_bg']};
             }}
-            QLineEdit::placeholder {{
-                color: {COLORS['text_secondary']};
+        """)
+        
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Пароль")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLORS['primary_bg']};
+                color: {COLORS['text_primary']};
+                padding: 15px;
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                font-size: 16px;
+                font-family: 'Segoe UI';
             }}
-        """
+            QLineEdit:focus {{
+                border-color: {COLORS['accent_green']};
+            }}
+        """)
         
-        for edit in [self.username_edit, self.email_edit, self.pass1_edit, self.pass2_edit]:
-            edit.setStyleSheet(input_style)
-        
-        self.pass1_edit.setEchoMode(QLineEdit.Password)
-        self.pass2_edit.setEchoMode(QLineEdit.Password)
-        
-        form_layout.addRow("ЛОГИН:", self.username_edit)
-        form_layout.addRow("EMAIL:", self.email_edit)
-        form_layout.addRow("ПАРОЛЬ:", self.pass1_edit)
-        form_layout.addRow("ПОВТОР ПАРОЛЯ:", self.pass2_edit)
-        
-        for i in range(form_layout.rowCount()):
-            label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
-            if label:
-                label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-family: 'Segoe UI'; font-weight: bold;")
-        
-        btn_create = QPushButton("СОЗДАТЬ АККАУНТ")
-        btn_create.setStyleSheet(f"""
+        btn_login = QPushButton("🚀 ВОЙТИ")
+        btn_login.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
                     stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
                 color: {COLORS['text_primary']};
                 border: none;
-                padding: 12px 24px;
+                padding: 15px;
                 border-radius: 8px;
                 font-size: 16px;
                 font-weight: bold;
@@ -132,186 +137,19 @@ class RegisterPage(QWidget):
                     stop:0 #0ea271, stop:1 #0c857a);
             }}
         """)
-        btn_create.clicked.connect(self.handle_register)
+        btn_login.clicked.connect(self.login)
         
-        btn_back = QPushButton("◀ НАЗАД К ВХОДУ")
-        btn_back.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {COLORS['accent_green']};
-                border: 2px solid {COLORS['accent_green']};
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-size: 14px;
-                margin-top: 15px;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['accent_green']};
-                color: {COLORS['text_primary']};
-            }}
-        """)
-        btn_back.clicked.connect(self.go_login)
-        
-        main_layout.addWidget(title)
-        main_layout.addWidget(form_container)
-        main_layout.addWidget(btn_create)
-        main_layout.addWidget(btn_back)
-        main_layout.addStretch()
-
-    def handle_register(self):
-        u = self.username_edit.text().strip()
-        e = self.email_edit.text().strip()
-        p1 = self.pass1_edit.text()
-        p2 = self.pass2_edit.text()
-
-        if not u or not e or not p1 or not p2:
-            QMessageBox.warning(self, "ВНИМАНИЕ", "Заполните все поля.")
-            return
-            
-        if len(u) < 3:
-            QMessageBox.warning(self, "ВНИМАНИЕ", "Логин должен быть не короче 3 символов.")
-            return
-            
-        if len(p1) < 6:
-            QMessageBox.warning(self, "ВНИМАНИЕ", "Пароль должен быть не короче 6 символов.")
-            return
-            
-        if p1 != p2:
-            QMessageBox.critical(self, "❌ ОШИБКА", "Пароли не совпадают.")
-            return
-
-        try:
-            create_user(u, e, p1)
-            QMessageBox.information(self, "✅ УСПЕХ", "Аккаунт создан. Теперь войдите.")
-            self.go_login()
-            
-        except Exception as err:
-            error_msg = str(err)
-            if "username" in error_msg.lower():
-                QMessageBox.critical(self, "❌ ОШИБКА", "Логин уже занят.")
-            elif "email" in error_msg.lower():
-                QMessageBox.critical(self, "❌ ОШИБКА", "Email уже зарегистрирован.")
-            else:
-                QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось создать пользователя: {error_msg}")
-
-class LoginPage(QWidget):
-    def __init__(self, on_login_success, go_register):
-        super().__init__()
-        self.on_login_success = on_login_success
-        self.go_register = go_register
-        self.setup_ui()
-
-    def setup_ui(self):
-        main_layout = QHBoxLayout(self)
-        self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
-        
-        left_panel = QWidget()
-        left_panel.setStyleSheet(f"""
-            background-color: {COLORS['secondary_bg']};
-            border: 2px solid {COLORS['accent_green']};
-            border-radius: 15px;
-            margin: 20px;
-        """)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(40, 40, 40, 40)
-        
-        title = QLabel("АВТОРИЗАЦИЯ")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(f"""
-            font-size: 28px;
-            font-weight: bold;
-            color: {COLORS['accent_green']};
-            margin-bottom: 30px;
-            font-family: 'Segoe UI';
-        """)
-        
-        form_layout = QFormLayout()
-        form_layout.setLabelAlignment(Qt.AlignLeft)
-        form_layout.setSpacing(20)
-        
-        self.login_edit = QLineEdit()
-        self.login_edit.setPlaceholderText("Введите логин или email")
-        self.login_edit.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['secondary_bg']};
-                color: {COLORS['text_primary']};
-                padding: 12px;
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                font-size: 14px;
-                font-family: 'Segoe UI';
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['accent_green']};
-                background-color: {COLORS['secondary_bg']};
-            }}
-            QLineEdit::placeholder {{
-                color: {COLORS['text_secondary']};
-            }}
-        """)
-        
-        self.pass_edit = QLineEdit()
-        self.pass_edit.setPlaceholderText("Введите пароль")
-        self.pass_edit.setEchoMode(QLineEdit.Password)
-        self.pass_edit.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['secondary_bg']};
-                color: {COLORS['text_primary']};
-                padding: 12px;
-                border: 2px solid {COLORS['border']};
-                border-radius: 8px;
-                font-size: 14px;
-                font-family: 'Segoe UI';
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['accent_green']};
-                background-color: {COLORS['secondary_bg']};
-            }}
-            QLineEdit::placeholder {{
-                color: {COLORS['text_secondary']};
-            }}
-        """)
-        
-        form_layout.addRow("Логин/Email:", self.login_edit)
-        form_layout.addRow("Пароль:", self.pass_edit)
-        
-        for i in range(form_layout.rowCount()):
-            label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
-            if label:
-                label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-family: 'Segoe UI'; font-weight: bold;")
-        
-        btn_login = QPushButton("ВОЙТИ")
-        btn_login.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 12px;
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #0ea271, stop:1 #0c857a);
-            }}
-        """)
-        btn_login.clicked.connect(self.handle_login)
-        
-        btn_register = QPushButton("СОЗДАТЬ АККАУНТ")
+        btn_register = QPushButton("📝 РЕГИСТРАЦИЯ")
         btn_register.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
                 color: {COLORS['accent_green']};
                 border: 2px solid {COLORS['accent_green']};
-                padding: 12px;
+                padding: 15px;
                 border-radius: 8px;
                 font-size: 16px;
                 font-weight: bold;
-                margin-top: 15px;
+                margin-top: 10px;
                 font-family: 'Segoe UI';
             }}
             QPushButton:hover {{
@@ -321,83 +159,204 @@ class LoginPage(QWidget):
         """)
         btn_register.clicked.connect(self.go_register)
         
-        demo_label = QLabel("Демо доступ:\nКлиент: demo / 123\nСотрудник: admin / 123")
-        demo_label.setStyleSheet(f"""
+        info_label = QLabel("🔑 Тестовые пользователи:\nАдмин: admin/admin\nКлиенты: client1/123, client2/123")
+        info_label.setAlignment(Qt.AlignCenter)
+        info_label.setStyleSheet(f"""
             color: {COLORS['text_secondary']};
-            font-size: 12px;
+            font-size: 14px;
             margin-top: 20px;
-            text-align: center;
             font-family: 'Segoe UI';
-            line-height: 1.5;
+            background-color: {COLORS['primary_bg']};
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid {COLORS['border']};
         """)
         
-        left_layout.addWidget(title)
-        left_layout.addLayout(form_layout)
-        left_layout.addWidget(btn_login)
-        left_layout.addWidget(btn_register)
-        left_layout.addWidget(demo_label)
-        left_layout.addStretch()
+        form_layout.addWidget(form_title)
+        form_layout.addWidget(self.username_input)
+        form_layout.addWidget(self.password_input)
+        form_layout.addWidget(btn_login)
+        form_layout.addWidget(btn_register)
+        form_layout.addWidget(info_label)
         
-        right_panel = QWidget()
-        right_panel.setStyleSheet(f"""
+        layout.addStretch()
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addWidget(form_container)
+        layout.addStretch()
+
+    def login(self):
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+    
+        if not username or not password:
+            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
+            return
+        
+        print(f"🔐 Попытка входа: {username}")
+    
+        try:
+            user = find_user_by_login_or_email(username)
+        
+            if user and verify_password(password, user['password_hash']):
+                print(f"✅ Вход выполнен: {user['username']} (роль: {user['role']})")
+                self.on_login_success(user)
+            else:
+                print("❌ Неверный логин или пароль")
+                QMessageBox.warning(self, "Ошибка", "Неверный логин или пароль")
+            
+        except Exception as e:
+            print(f"❌ Ошибка при входе: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Ошибка подключения к базе данных:\n{str(e)}")
+
+class RegisterPage(QWidget):
+    def __init__(self, go_login):
+        super().__init__()
+        self.go_login = go_login
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 40, 40, 40)
+        
+        title = QLabel("РЕГИСТРАЦИЯ")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(f"""
+            font-size: 36px;
+            font-weight: bold;
+            color: {COLORS['accent_green']};
+            margin-bottom: 30px;
+            font-family: 'Segoe UI';
+        """)
+        
+        form_container = QWidget()
+        form_container.setStyleSheet(f"""
             background-color: {COLORS['secondary_bg']};
             border: 2px solid {COLORS['accent_green']};
             border-radius: 15px;
-            margin: 20px;
+            padding: 40px;
+            max-width: 500px;
+            margin: 0 auto;
         """)
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setAlignment(Qt.AlignCenter)
+        form_layout = QFormLayout(form_container)
+        form_layout.setSpacing(20)
         
-        logo_label = QLabel("AUTO DREAMS")
-        logo_label.setStyleSheet(f"""
-            color: {COLORS['accent_green']};
-            font-size: 36px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            font-family: 'Segoe UI';
+        self.first_name_input = QLineEdit()
+        self.first_name_input.setPlaceholderText("Введите ваше имя")
+        self.last_name_input = QLineEdit()
+        self.last_name_input.setPlaceholderText("Введите вашу фамилию")
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Придумайте логин")
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Введите ваш email")
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Придумайте пароль")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setPlaceholderText("Повторите пароль")
+        self.confirm_password_input.setEchoMode(QLineEdit.Password)
+        
+        input_style = f"""
+            QLineEdit {{
+                background-color: {COLORS['primary_bg']};
+                color: {COLORS['text_primary']};
+                padding: 12px;
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                font-size: 14px;
+                font-family: 'Segoe UI';
+                min-width: 300px;
+            }}
+            QLineEdit:focus {{
+                border-color: {COLORS['accent_green']};
+            }}
+        """
+        
+        for input_field in [self.first_name_input, self.last_name_input, self.username_input, 
+                           self.email_input, self.password_input, self.confirm_password_input]:
+            input_field.setStyleSheet(input_style)
+        
+        form_layout.addRow("Имя:", self.first_name_input)
+        form_layout.addRow("Фамилия:", self.last_name_input)
+        form_layout.addRow("Логин:", self.username_input)
+        form_layout.addRow("Email:", self.email_input)
+        form_layout.addRow("Пароль:", self.password_input)
+        form_layout.addRow("Подтверждение:", self.confirm_password_input)
+        
+        for i in range(form_layout.rowCount()):
+            label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
+            if label:
+                label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-weight: bold; font-family: 'Segoe UI';")
+        
+        btn_register = QPushButton("✅ ЗАРЕГИСТРИРОВАТЬСЯ")
+        btn_register.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                border: none;
+                padding: 15px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                margin-top: 20px;
+                font-family: 'Segoe UI';
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 #0ea271, stop:1 #0c857a);
+            }}
         """)
+        btn_register.clicked.connect(self.register)
         
-        slogan_label = QLabel("ПРЕМИАЛЬНЫЕ АВТОМОБИЛИ")
-        slogan_label.setStyleSheet(f"""
-            color: {COLORS['accent_teal']};
-            font-size: 18px;
-            font-weight: bold;
-            font-family: 'Segoe UI';
+        btn_back = QPushButton("◀ НАЗАД К ВХОДУ")
+        btn_back.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLORS['accent_green']};
+                border: 2px solid {COLORS['accent_green']};
+                padding: 12px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                margin-top: 10px;
+                font-family: 'Segoe UI';
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['accent_green']};
+                color: {COLORS['text_primary']};
+            }}
         """)
+        btn_back.clicked.connect(self.go_login)
         
-        decor_label = QLabel("🚗 💨 ✨")
-        decor_label.setStyleSheet(f"""
-            color: {COLORS['accent_green']};
-            font-size: 24px;
-            margin-top: 20px;
-        """)
-        
-        right_layout.addWidget(logo_label)
-        right_layout.addWidget(slogan_label)
-        right_layout.addWidget(decor_label)
-        right_layout.addStretch()
-        
-        main_layout.addWidget(left_panel, 1)
-        main_layout.addWidget(right_panel, 1)
+        layout.addWidget(title)
+        layout.addWidget(form_container)
+        layout.addWidget(btn_register)
+        layout.addWidget(btn_back)
+        layout.addStretch()
 
-    def handle_login(self):
-        login = self.login_edit.text().strip()
-        password = self.pass_edit.text()
+    def register(self):
+        first_name = self.first_name_input.text().strip()
+        last_name = self.last_name_input.text().strip()
+        username = self.username_input.text().strip()
+        email = self.email_input.text().strip()
+        password = self.password_input.text().strip()
+        confirm_password = self.confirm_password_input.text().strip()
         
-        if not login or not password:
-            QMessageBox.warning(self, "Внимание", "Введите логин и пароль.")
+        if not all([first_name, last_name, username, email, password, confirm_password]):
+            QMessageBox.warning(self, "Ошибка", "Заполните все поля")
             return
-            
-        user = find_user_by_login_or_email(login)
-        if not user:
-            QMessageBox.critical(self, "Ошибка входа", "Пользователь не найден.")
+        if password != confirm_password:
+            QMessageBox.warning(self, "Ошибка", "Пароли не совпадают")
             return
-            
-        if not verify_password(password, user["password_hash"]):
-            QMessageBox.critical(self, "Ошибка входа", "Неверный пароль.")
-            return
-            
-        self.on_login_success(user)
+        try:
+            # ПРАВИЛЬНЫЙ ВЫЗОВ - 5 АРГУМЕНТОВ
+            create_user(username, email, password, first_name, last_name)
+            QMessageBox.information(self, "Успех", "Регистрация прошла успешно! Теперь вы можете войти.")
+            self.go_login()
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", str(e))
 
 class CarCard(QWidget):
     def __init__(self, car, user, on_buy_callback):
@@ -558,13 +517,13 @@ class CarCard(QWidget):
                 os.makedirs(images_path)
                 return None
             
-            brand_clean = self.car['brand'].replace(' ', '_').replace('-', '_').lower()
-            model_clean = self.car['model'].replace(' ', '_').replace('-', '_').lower()
+            # Создаем список возможных имен файлов
             possible_filenames = [
-                f"{brand_clean}_{model_clean}.jpg",
-                f"{brand_clean}_{model_clean}.png",
-                f"{self.car['brand']}_{self.car['model']}.jpg".replace(' ', '_').lower(),
-                f"{self.car['brand']}_{self.car['model']}.png".replace(' ', '_').lower(),
+                f"{self.car['brand'].lower()}_{self.car['model'].lower()}.jpg",
+                f"{self.car['brand'].lower()}_{self.car['model'].lower()}.png",
+                f"{self.car['brand'].lower()}_{self.car['model'].lower()}.jpeg",
+                f"{self.car['id']}.jpg",
+                f"{self.car['id']}.png",
                 "default_car.jpg"
             ]
             
@@ -630,23 +589,24 @@ class CarCard(QWidget):
     def get_car_description(self):
         descriptions = {
             'Toyota Camry': 'Стильный седан • Надежность • Комфорт • Экономичный расход',
-            'Honda CR-V': 'Практичный кроссовер • Просторный салон • Безопасность',
+            'Toyota Corolla': 'Компактный седан • Экономичность • Надежность • Безопасность',
+            'Honda Civic': 'Спортивный седан • Динамика • Качество • Технологии',
             'BMW X5': 'Премиальный внедорожник • Динамика • Роскошь • Технологии',
+            'BMW 3 Series': 'Бизнес-седан • Спортивный характер • Комфорт • Качество',
             'Mercedes E-Class': 'Бизнес-класс • Комфорт • Инновации • Качество',
-            'Audi Q7': 'Семейный внедорожник • Простор • Безопасность • Стиль',
-            'Lexus RX': 'Премиум-кроссовер • Тишина • Надежность • Комфорт',
+            'Audi A4': 'Премиум седан • Стиль • Технологии • Качество',
+            'Ford Focus': 'Компактный хэтчбек • Практичность • Экономичность • Надежность',
             'Hyundai Tucson': 'Современный дизайн • Гарантия • Оснащение • Экономичность',
             'Kia Sportage': 'Стильный кроссовер • Цена/Качество • Гарантия • Комфорт'
         }
         
         key = f"{self.car['brand']} {self.car['model']}"
-        return descriptions.get(key, "Качественный автомобиль • Надежность • Комфорт • Безопасность")
+        return descriptions.get(key, "Качественный автомобиль • Надёжность • Комфорт • Безопасность")
 
     def buy_car(self):
         if self.car['status'] != 'в наличии':
             QMessageBox.warning(self, "Внимание", "Этот автомобиль уже продан.")
             return
-            
         reply = QMessageBox()
         reply.setWindowTitle("🎯 ПОДТВЕРЖДЕНИЕ ПОКУПКИ")
         reply.setText(f"""
@@ -698,7 +658,7 @@ class CarCard(QWidget):
                 create_order(client_id, self.car['id'], employee_id, self.car['price'])
                 
                 success_msg = QMessageBox()
-                success_msg.setWindowTitle("🎉 ПОЗДРАВЛЯЕМ!")
+                success_msg.setWindowTitle("🎉 ПОЗДРАВЛЕНИЯ!")
                 success_msg.setText(f"""
 <b style='color: {COLORS['accent_green']};'>ПОКУПКА УСПЕШНО ОФОРМЛЕНА!</b>
 
@@ -729,10 +689,6 @@ class CarCard(QWidget):
                         border-radius: 6px;
                         font-weight: bold;
                         font-family: 'Segoe UI';
-                    }}
-                    QPushButton:hover {{
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                            stop:0 #0ea271, stop:1 #0c857a);
                     }}
                 """)
                 success_msg.exec()
@@ -846,13 +802,11 @@ class OrderCard(QWidget):
             if not os.path.exists(images_path):
                 return None
             
-            brand_clean = self.order['brand'].replace(' ', '_').replace('-', '_').lower()
-            model_clean = self.order['model'].replace(' ', '_').replace('-', '_').lower()
+            # Создаем список возможных имен файлов
             possible_filenames = [
-                f"{brand_clean}_{model_clean}.jpg",
-                f"{brand_clean}_{model_clean}.png",
-                f"{self.order['brand']}_{self.order['model']}.jpg".replace(' ', '_').lower(),
-                f"{self.order['brand']}_{self.order['model']}.png".replace(' ', '_').lower(),
+                f"{self.order['brand'].lower()}_{self.order['model'].lower()}.jpg",
+                f"{self.order['brand'].lower()}_{self.order['model'].lower()}.png",
+                f"{self.order['brand'].lower()}_{self.order['model'].lower()}.jpeg",
                 "default_car.jpg"
             ]
             
@@ -898,7 +852,9 @@ class ClientMainMenuPage(QWidget):
             font-family: 'Segoe UI';
         """)
         
-        welcome = QLabel(f"ДОБРО ПОЖАЛОВАТЬ, {self.user['username'].upper()}!")
+        # Показываем ФИО пользователя
+        welcome_text = f"ДОБРО ПОЖАЛОВАТЬ, {self.user['first_name']} {self.user['last_name']}!"
+        welcome = QLabel(welcome_text)
         welcome.setAlignment(Qt.AlignCenter)
         welcome.setStyleSheet(f"""
             font-size: 18px;
@@ -991,7 +947,9 @@ class ClientMainMenuPage(QWidget):
 
     def create_menu_button(self, text):
         button = QPushButton(text)
-        button.setMinimumSize(400, 60)
+        # увеличенный минимальный размер чтобы текст не обрезался
+        button.setMinimumSize(420, 70)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
@@ -1059,7 +1017,9 @@ class EmployeeMainMenuPage(QWidget):
             font-family: 'Segoe UI';
         """)
         
-        welcome = QLabel(f"ДОБРО ПОЖАЛОВАТЬ, {self.user['username'].upper()}!")
+        # Показываем ФИО сотрудника
+        welcome_text = f"ДОБРО ПОЖАЛОВАТЬ, {self.user['first_name']} {self.user['last_name']}!"
+        welcome = QLabel(welcome_text)
         welcome.setAlignment(Qt.AlignCenter)
         welcome.setStyleSheet(f"""
             font-size: 18px;
@@ -1091,14 +1051,17 @@ class EmployeeMainMenuPage(QWidget):
         
         btn_manage_cars = self.create_menu_button("🚗 УПРАВЛЕНИЕ АВТОМОБИЛЯМИ")
         btn_view_all_cars = self.create_menu_button("📋 ВЕСЬ АССОРТИМЕНТ")
+        btn_realtime_stats = self.create_menu_button("📊 СТАТИСТИКА В РЕАЛЬНОМ ВРЕМЕНИ")
         btn_exit = self.create_menu_button("🚪 ВЫХОД")
         
         btn_manage_cars.clicked.connect(self.show_manage_cars)
         btn_view_all_cars.clicked.connect(self.show_all_cars)
+        btn_realtime_stats.clicked.connect(self.show_realtime_stats)
         btn_exit.clicked.connect(self.logout_callback)
         
         menu_layout.addWidget(btn_manage_cars)
         menu_layout.addWidget(btn_view_all_cars)
+        menu_layout.addWidget(btn_realtime_stats)
         menu_layout.addWidget(btn_exit)
         
         instruction_frame = QFrame()
@@ -1126,6 +1089,7 @@ class EmployeeMainMenuPage(QWidget):
         instruction_text = QLabel(
             "• УПРАВЛЕНИЕ АВТОМОБИЛЯМИ - добавление, редактирование, удаление\n"
             "• ВЕСЬ АССОРТИМЕНТ - просмотр всех автомобилей (включая проданные)\n"  
+            "• СТАТИСТИКА В РЕАЛЬНОМ ВРЕМЕНИ - актуальные данные о продажах\n"
             "• ВЫХОД - возврат к окну авторизации"
         )
         instruction_text.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; line-height: 1.5; font-family: 'Segoe UI';")
@@ -1144,7 +1108,9 @@ class EmployeeMainMenuPage(QWidget):
 
     def create_menu_button(self, text):
         button = QPushButton(text)
-        button.setMinimumSize(400, 60)
+        # увеличенный минимальный размер чтобы текст не обрезался
+        button.setMinimumSize(420, 70)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
@@ -1170,6 +1136,9 @@ class EmployeeMainMenuPage(QWidget):
     
     def show_all_cars(self):
         self.parent().parent().show_all_cars_page()
+    
+    def show_realtime_stats(self):
+        self.parent().parent().show_realtime_stats_page()
 
 class CarCatalogPage(QWidget):
     def __init__(self, user, back_callback):
@@ -1390,6 +1359,8 @@ class ManageCarsPage(QWidget):
         self.user = user
         self.back_callback = back_callback
         self.setup_ui()
+        # Загружаем таблицу при создании
+        self.load_cars()
 
     def setup_ui(self):
         self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
@@ -1622,8 +1593,6 @@ class ManageCarsPage(QWidget):
         layout.addLayout(buttons_layout)
         layout.addWidget(btn_back)
         
-        self.load_cars()
-
     def add_car(self):
         try:
             brand = self.brand_edit.text().strip()
@@ -1641,7 +1610,40 @@ class ManageCarsPage(QWidget):
             if len(vin) != 17:
                 QMessageBox.warning(self, "ВНИМАНИЕ", "VIN должен содержать 17 символов.")
                 return
+
+            # Проверяем наличие изображения в папке images перед добавлением
+            images_path = os.path.join(os.path.dirname(__file__), "images")
+            if not os.path.exists(images_path):
+                # если папки нет — считаем, что изображения нет
+                QMessageBox.warning(self, "ВНИМАНИЕ", "Папка images не найдена. Поместите изображение в папку 'images'.")
+                return
+
+            # Возможные имена изображений (brand_model в нижнем регистре)
+            normalized_brand = brand.strip().lower().replace(" ", "_")
+            normalized_model = model.strip().lower().replace(" ", "_")
+            possible_filenames = [
+                f"{normalized_brand}_{normalized_model}.jpg",
+                f"{normalized_brand}_{normalized_model}.png",
+                f"{normalized_brand}_{normalized_model}.jpeg",
+                f"{normalized_brand}-{normalized_model}.jpg",
+                f"{normalized_brand}-{normalized_model}.png",
+                f"{normalized_brand}{normalized_model}.jpg",
+                f"{normalized_brand}{normalized_model}.png"
+            ]
+            image_found = False
+            for fn in possible_filenames:
+                if os.path.exists(os.path.join(images_path, fn)):
+                    image_found = True
+                    break
+
+            if not image_found:
+                QMessageBox.warning(self, "ВНИМАНИЕ", 
+                    f"Изображение для {brand} {model} не найдено в папке 'images'.\n"
+                    f"Имена файлов, принимаемые системой: {', '.join(possible_filenames[:3])}\n"
+                    "Пожалуйста, добавьте фото и повторите.")
+                return
             
+            # Если изображение есть — добавляем автомобиль
             add_car(brand, model, year, vin, color, price, mileage)
             QMessageBox.information(self, "✅ УСПЕХ", "Автомобиль успешно добавлен!")
             
@@ -1653,7 +1655,7 @@ class ManageCarsPage(QWidget):
             self.price_spin.setValue(1000000)
             self.mileage_spin.setValue(0)
             
-            # Обновляем таблицу
+            # Обновляем таблицу (real-time визуальный отклик)
             self.load_cars()
             
         except Exception as e:
@@ -1664,22 +1666,17 @@ class ManageCarsPage(QWidget):
         if selected_row == -1:
             QMessageBox.warning(self, "ВНИМАНИЕ", "Выберите автомобиль для редактирования.")
             return
-            
         car_id = int(self.table.item(selected_row, 0).text())
         car = get_car_by_id(car_id)
-        
         if not car:
             QMessageBox.critical(self, "❌ ОШИБКА", "Не удалось загрузить данные автомобиля.")
             return
-        
-        # Создаем диалоговое окно редактирования
-        dialog = QWidget()
+        # Диалог редактирования (как у тебя был)...
+        dialog = QDialog(self)
         dialog.setWindowTitle("Редактирование автомобиля")
         dialog.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
         dialog.setFixedSize(400, 500)
-        
         layout = QVBoxLayout(dialog)
-        
         title = QLabel("РЕДАКТИРОВАНИЕ АВТОМОБИЛЯ")
         title.setStyleSheet(f"""
             font-size: 20px; 
@@ -1689,10 +1686,8 @@ class ManageCarsPage(QWidget):
             font-family: 'Segoe UI';
         """)
         title.setAlignment(Qt.AlignCenter)
-        
         form_layout = QFormLayout()
         form_layout.setSpacing(15)
-        
         brand_edit = QLineEdit(car['brand'])
         model_edit = QLineEdit(car['model'])
         year_spin = QSpinBox()
@@ -1708,7 +1703,6 @@ class ManageCarsPage(QWidget):
         mileage_spin.setRange(0, 1000000)
         mileage_spin.setValue(car['mileage'])
         mileage_spin.setSuffix(" км")
-        
         input_style = f"""
             QLineEdit, QSpinBox {{
                 background-color: {COLORS['secondary_bg']};
@@ -1720,13 +1714,11 @@ class ManageCarsPage(QWidget):
                 font-family: 'Segoe UI';
             }}
         """
-        
         for edit in [brand_edit, model_edit, vin_edit, color_edit]:
             edit.setStyleSheet(input_style)
         year_spin.setStyleSheet(input_style)
         price_spin.setStyleSheet(input_style)
         mileage_spin.setStyleSheet(input_style)
-        
         form_layout.addRow("Марка:", brand_edit)
         form_layout.addRow("Модель:", model_edit)
         form_layout.addRow("Год:", year_spin)
@@ -1734,12 +1726,10 @@ class ManageCarsPage(QWidget):
         form_layout.addRow("Цвет:", color_edit)
         form_layout.addRow("Цена:", price_spin)
         form_layout.addRow("Пробег:", mileage_spin)
-        
         for i in range(form_layout.rowCount()):
             label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
             if label:
                 label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-family: 'Segoe UI'; font-weight: bold;")
-        
         btn_save = QPushButton("💾 СОХРАНИТЬ")
         btn_save.setStyleSheet(f"""
             QPushButton {{
@@ -1759,7 +1749,6 @@ class ManageCarsPage(QWidget):
                     stop:0 #0ea271, stop:1 #0c857a);
             }}
         """)
-        
         btn_cancel = QPushButton("❌ ОТМЕНА")
         btn_cancel.setStyleSheet(f"""
             QPushButton {{
@@ -1776,9 +1765,9 @@ class ManageCarsPage(QWidget):
                 background-color: #dc2626;
             }}
         """)
-        
         def save_changes():
             try:
+                # если бренд или модель поменялись, стоит предупредить о соответствии фото отдельно (но мы просто обновляем данные)
                 update_car(
                     car_id,
                     brand_edit.text().strip(),
@@ -1790,31 +1779,27 @@ class ManageCarsPage(QWidget):
                     mileage_spin.value()
                 )
                 QMessageBox.information(dialog, "✅ УСПЕХ", "Данные автомобиля обновлены!")
-                dialog.close()
+                dialog.accept()
                 self.load_cars()
             except Exception as e:
                 QMessageBox.critical(dialog, "❌ ОШИБКА", f"Не удалось обновить данные: {str(e)}")
-        
         btn_save.clicked.connect(save_changes)
-        btn_cancel.clicked.connect(dialog.close)
-        
+        btn_cancel.clicked.connect(dialog.reject)
         layout.addWidget(title)
         layout.addLayout(form_layout)
         layout.addWidget(btn_save)
         layout.addWidget(btn_cancel)
-        
-        dialog.exec()
+        if dialog.exec() == QDialog.Accepted:
+            self.load_cars()
 
     def delete_car(self):
         selected_row = self.table.currentRow()
         if selected_row == -1:
             QMessageBox.warning(self, "ВНИМАНИЕ", "Выберите автомобиль для удаления.")
             return
-            
         car_id = int(self.table.item(selected_row, 0).text())
         brand = self.table.item(selected_row, 1).text()
         model = self.table.item(selected_row, 2).text()
-        
         reply = QMessageBox.question(
             self, 
             "Подтверждение удаления",
@@ -1822,7 +1807,6 @@ class ManageCarsPage(QWidget):
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
         if reply == QMessageBox.Yes:
             try:
                 delete_car(car_id)
@@ -1834,11 +1818,9 @@ class ManageCarsPage(QWidget):
     def load_cars(self):
         try:
             cars = get_all_cars()
-            
             self.table.setRowCount(len(cars))
             self.table.setColumnCount(8)
             self.table.setHorizontalHeaderLabels(["ID", "Марка", "Модель", "Год", "VIN", "Цвет", "Цена", "Статус"])
-            
             for row, car in enumerate(cars):
                 self.table.setItem(row, 0, QTableWidgetItem(str(car['id'])))
                 self.table.setItem(row, 1, QTableWidgetItem(car['brand']))
@@ -1847,18 +1829,169 @@ class ManageCarsPage(QWidget):
                 self.table.setItem(row, 4, QTableWidgetItem(car['vin']))
                 self.table.setItem(row, 5, QTableWidgetItem(car['color']))
                 self.table.setItem(row, 6, QTableWidgetItem(f"{car['price']:,.0f} ₽"))
-                
                 status_item = QTableWidgetItem(car['status'])
                 if car['status'] == 'в наличии':
                     status_item.setForeground(QColor(COLORS['success']))
                 else:
                     status_item.setForeground(QColor(COLORS['danger']))
                 self.table.setItem(row, 7, status_item)
-            
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
+
+class RealtimeStatsPage(QWidget):
+    def __init__(self, user, back_callback):
+        super().__init__()
+        self.user = user
+        self.back_callback = back_callback
+        self.setup_ui()
+
+    def get_realtime_stats(self):
+        """Получение статистики в реальном времени"""
+        try:
+            conn = get_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM CARS")
+            total_cars = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM CARS WHERE status = 'в наличии'")
+            available_cars = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM CARS WHERE status = 'продан'")
+            sold_cars = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM ORDERS")
+            total_orders = cursor.fetchone()[0]
+            cursor.execute("SELECT SUM(final_price) FROM ORDERS")
+            total_revenue = cursor.fetchone()[0] or 0
+            cursor.execute("SELECT COUNT(*) FROM CLIENTS")
+            total_clients = cursor.fetchone()[0]
+            conn.close()
+            stats = [
+                ("Всего автомобилей", total_cars, COLORS['accent_green']),
+                ("В наличии", available_cars, COLORS['success']),
+                ("Продано", sold_cars, COLORS['accent_teal']),
+                ("Всего заказов", total_orders, COLORS['accent_green']),
+                ("Общая выручка", f"{total_revenue:,.0f} ₽", COLORS['success']),
+                ("Всего клиентов", total_clients, COLORS['accent_teal'])
+            ]
+            return stats
+        except Exception as e:
+            print(f"❌ Ошибка получения статистики: {e}")
+            raise Exception(f"Не удалось загрузить статистику: {str(e)}")
+
+    def setup_ui(self):
+        self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        title = QLabel("СТАТИСТИКА В РЕАЛЬНОМ ВРЕМЕНИ")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            color: {COLORS['accent_green']}; 
+            font-weight: bold; 
+            margin-bottom: 20px;
+            font-family: 'Segoe UI';
+        """)
+        title.setAlignment(Qt.AlignCenter)
+        
+        try:
+            stats_container = QWidget()
+            stats_container.setStyleSheet(f"""
+                background-color: {COLORS['secondary_bg']};
+                border: 2px solid {COLORS['accent_green']};
+                border-radius: 12px;
+                padding: 25px;
+            """)
+            stats_layout = QGridLayout(stats_container)
+            stats_layout.setSpacing(15)
+            stats = self.get_realtime_stats()
+            stats_widgets = []
+            for i, (label, value, color) in enumerate(stats):
+                stat_widget = QWidget()
+                stat_widget.setStyleSheet(f"""
+                    background-color: {COLORS['primary_bg']};
+                    border: 2px solid {color};
+                    border-radius: 8px;
+                    padding: 15px;
+                """)
+                stat_layout = QVBoxLayout(stat_widget)
+                value_label = QLabel(str(value))
+                value_label.setStyleSheet(f"""
+                    color: {color};
+                    font-size: 24px;
+                    font-weight: bold;
+                    font-family: 'Segoe UI';
+                """)
+                value_label.setAlignment(Qt.AlignCenter)
+                name_label = QLabel(label)
+                name_label.setStyleSheet(f"""
+                    color: {COLORS['text_secondary']};
+                    font-size: 14px;
+                    font-family: 'Segoe UI';
+                """)
+                name_label.setAlignment(Qt.AlignCenter)
+                stat_layout.addWidget(value_label)
+                stat_layout.addWidget(name_label)
+                stats_widgets.append(stat_widget)
+            for i, widget in enumerate(stats_widgets):
+                row = i // 3
+                col = i % 3
+                stats_layout.addWidget(widget, row, col)
+            layout.addWidget(title)
+            layout.addWidget(stats_container)
+        except Exception as e:
+            error_label = QLabel(f"❌ Не удалось загрузить статистику:\n{str(e)}")
+            error_label.setStyleSheet(f"color: {COLORS['danger']}; font-size: 16px; font-family: 'Segoe UI';")
+            error_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(title)
+            layout.addWidget(error_label)
+        
+        btn_refresh = QPushButton("🔄 ОБНОВИТЬ СТАТИСТИКУ")
+        btn_refresh.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                margin: 15px 0;
+                font-family: 'Segoe UI';
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 #0ea271, stop:1 #0c857a);
+            }}
+        """)
+        btn_refresh.clicked.connect(self.refresh_stats)
+        
+        btn_back = QPushButton("◀ НАЗАД В МЕНЮ")
+        btn_back.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                border: none;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                margin-top: 10px;
+                font-family: 'Segoe UI';
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 #0ea271, stop:1 #0c857a);
+            }}
+        """)
+        btn_back.clicked.connect(self.back_callback)
+        
+        layout.addWidget(btn_refresh)
+        layout.addWidget(btn_back)
+        layout.addStretch()
+
+    def refresh_stats(self):
+        self.parent().parent().show_realtime_stats_page()
 
 class OrdersPage(QWidget):
     def __init__(self, user, back_callback):
@@ -2274,7 +2407,7 @@ class MainWindow(QMainWindow):
     def handle_login_success(self, user):
         self.user = user
         
-        if user['role'] == 'employee':
+        if user['role'] == 'employee' or user['role'] == 'admin':
             self.main_menu = EmployeeMainMenuPage(user, logout_callback=self.show_login)
         else:
             self.main_menu = ClientMainMenuPage(user, logout_callback=self.show_login)
@@ -2297,6 +2430,11 @@ class MainWindow(QMainWindow):
         self.stacked.addWidget(self.manage_cars)
         self.stacked.setCurrentWidget(self.manage_cars)
     
+    def show_realtime_stats_page(self):
+        self.realtime_stats = RealtimeStatsPage(self.user, back_callback=self.show_main_menu)
+        self.stacked.addWidget(self.realtime_stats)
+        self.stacked.setCurrentWidget(self.realtime_stats)
+    
     def show_orders_page(self):
         self.orders_page = OrdersPage(self.user, back_callback=self.show_main_menu)
         self.stacked.addWidget(self.orders_page)
@@ -2316,9 +2454,14 @@ class MainWindow(QMainWindow):
         self.stacked.setCurrentWidget(self.main_menu)
 
 if __name__ == "__main__":
-    init_db()
-    
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+    try:
+        init_db()
+        init_car_db()
+        
+        app = QApplication(sys.argv)
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        print(f"❌ Критическая ошибка при запуске: {e}")
+        QMessageBox.critical(None, "Ошибка запуска", f"Не удалось запустить приложение:\n{str(e)}")

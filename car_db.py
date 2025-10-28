@@ -1,265 +1,368 @@
 import pyodbc
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from auth_db import get_conn
 
-SERVER = 'ILYAS'
-DATABASE = 'CarDealership'
-USERNAME = 'sa'
-PASSWORD = '11111'
-
-def get_conn():
-    conn_str = f'DRIVER={{SQL Server}};SERVER={SERVER};DATABASE={DATABASE};UID={USERNAME};PWD={PASSWORD}'
-    return pyodbc.connect(conn_str)
-
-def get_all_cars() -> List[Dict[str, Any]]:
-    """Получить все автомобили"""
+# === ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ===
+def init_car_db():
+    """Создание таблиц, если они отсутствуют"""
     try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM CARS ORDER BY brand, model")
-            rows = cursor.fetchall()
-            
-            cars = []
-            for row in rows:
-                cars.append({
-                    'id': row[0],
-                    'brand': row[1],
-                    'model': row[2],
-                    'year': row[3],
-                    'vin': row[4],
-                    'color': row[5],
-                    'price': float(row[6]),
-                    'status': row[7],
-                    'mileage': row[8]
-                })
-            return cars
+        conn = get_conn()
+        if not conn:
+            print("❌ Нет соединения с базой данных")
+            return False
+
+        cursor = conn.cursor()
+
+        # Таблица автомобилей
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='cars' AND xtype='U')
+        CREATE TABLE cars (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            brand NVARCHAR(100),
+            model NVARCHAR(100),
+            year INT,
+            vin NVARCHAR(50) UNIQUE,
+            color NVARCHAR(50),
+            price FLOAT,
+            status NVARCHAR(50) DEFAULT 'в наличии',
+            mileage INT DEFAULT 0
+        )
+        """)
+
+        # Таблица сотрудников
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='employees' AND xtype='U')
+        CREATE TABLE employees (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            first_name NVARCHAR(100),
+            last_name NVARCHAR(100),
+            position NVARCHAR(100),
+            phone NVARCHAR(50),
+            email NVARCHAR(200),
+            user_id INT NULL
+        )
+        """)
+
+        # Таблица заказов
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='orders' AND xtype='U')
+        CREATE TABLE orders (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            client_id INT,
+            car_id INT,
+            employee_id INT,
+            sale_date DATETIME DEFAULT GETDATE(),
+            final_price FLOAT,
+            status NVARCHAR(50),
+            FOREIGN KEY (car_id) REFERENCES cars(id),
+            FOREIGN KEY (employee_id) REFERENCES employees(id)
+        )
+        """)
+
+        # Таблица отзывов
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='reviews' AND xtype='U')
+        CREATE TABLE reviews (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            client_id INT,
+            order_id INT,
+            rating INT,
+            comment NVARCHAR(MAX),
+            review_date DATETIME DEFAULT GETDATE(),
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        )
+        """)
+
+        # Добавляем тестовые данные
+        cursor.execute("SELECT COUNT(*) FROM employees")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO employees (first_name, last_name, position, phone, email)
+                VALUES ('Ильяс', 'Менеджер', 'Продавец-консультант', '+7-999-000-00-00', 'manager@autodreams.local')
+            """)
+
+        cursor.execute("SELECT COUNT(*) FROM cars")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO cars (brand, model, year, vin, color, price, status, mileage)
+                VALUES 
+                ('Toyota', 'Camry', 2023, 'JTNBE46KX83012345', 'Черный', 3300000, 'в наличии', 0),
+                ('BMW', 'X5', 2022, 'WBAKS01040C123456', 'Белый', 7200000, 'в наличии', 1000),
+                ('Mercedes', 'E-Class', 2023, 'W1K1770841V123456', 'Серый', 5800000, 'в наличии', 500),
+                ('Audi', 'A4', 2023, 'WAUZZFY28N0123456', 'Красный', 4200000, 'в наличии', 0),
+                ('Honda', 'Civic', 2023, '2HGFE186XPH123456', 'Синий', 2800000, 'в наличии', 0)
+            """)
+
+        conn.commit()
+        conn.close()
+        print("✅ Таблицы car_db успешно инициализированы")
+        return True
+
     except Exception as e:
-        print(f"Ошибка при получении автомобилей: {e}")
-        return []
+        print(f"❌ Ошибка инициализации car_db: {e}")
+        return False
+
+
+# === ОСНОВНЫЕ ФУНКЦИИ ===
+def get_all_cars() -> List[Dict[str, Any]]:
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cars ORDER BY brand, model")
+        rows = cursor.fetchall()
+        conn.close()
+        cars = []
+        for row in rows:
+            cars.append({
+                'id': row[0],
+                'brand': row[1],
+                'model': row[2],
+                'year': row[3],
+                'vin': row[4],
+                'color': row[5],
+                'price': float(row[6]),
+                'status': row[7],
+                'mileage': row[8]
+            })
+        return cars
+    except Exception as e:
+        raise Exception(f"Не удалось загрузить автомобили: {str(e)}")
+
 
 def get_available_cars() -> List[Dict[str, Any]]:
-    """Получить только доступные автомобили (в наличии)"""
     try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM CARS WHERE status = 'в наличии' ORDER BY brand, model")
-            rows = cursor.fetchall()
-            
-            cars = []
-            for row in rows:
-                cars.append({
-                    'id': row[0],
-                    'brand': row[1],
-                    'model': row[2],
-                    'year': row[3],
-                    'vin': row[4],
-                    'color': row[5],
-                    'price': float(row[6]),
-                    'status': row[7],
-                    'mileage': row[8]
-                })
-            return cars
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cars WHERE status = 'в наличии' ORDER BY brand, model")
+        rows = cursor.fetchall()
+        conn.close()
+        cars = []
+        for row in rows:
+            cars.append({
+                'id': row[0],
+                'brand': row[1],
+                'model': row[2],
+                'year': row[3],
+                'vin': row[4],
+                'color': row[5],
+                'price': float(row[6]),
+                'status': row[7],
+                'mileage': row[8]
+            })
+        return cars
     except Exception as e:
-        print(f"Ошибка при получении доступных автомобилей: {e}")
-        return []
+        raise Exception(f"Не удалось загрузить доступные автомобили: {str(e)}")
 
-def get_client_orders(client_id: int) -> List[Dict[str, Any]]:
+
+def get_car_by_id(car_id: int) -> Optional[Dict[str, Any]]:
     try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT o.*, c.brand, c.model, c.vin, c.price, c.color, c.year,
-                       emp.first_name + ' ' + emp.last_name as employee_name
-                FROM ORDERS o
-                JOIN CARS c ON o.car_id = c.id
-                JOIN EMPLOYEES emp ON o.employee_id = emp.id
-                WHERE o.client_id = ?
-                ORDER BY o.sale_date DESC
-            """, (client_id,))
-            
-            rows = cursor.fetchall()
-            orders = []
-            for row in rows:
-                orders.append({
-                    'id': row[0],
-                    'client_id': row[1],
-                    'car_id': row[2],
-                    'employee_id': row[3],
-                    'sale_date': row[4],
-                    'final_price': float(row[5]),
-                    'status': row[6],
-                    'brand': row[7],
-                    'model': row[8],
-                    'vin': row[9],
-                    'price': float(row[10]),
-                    'color': row[11],
-                    'year': row[12],
-                    'employee_name': row[13]
-                })
-            return orders
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cars WHERE id = ?", (car_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            'id': row[0],
+            'brand': row[1],
+            'model': row[2],
+            'year': row[3],
+            'vin': row[4],
+            'color': row[5],
+            'price': float(row[6]),
+            'status': row[7],
+            'mileage': row[8]
+        }
     except Exception as e:
-        print(f"Ошибка при получении заказов: {e}")
-        return []
+        raise Exception(f"Ошибка при загрузке автомобиля: {e}")
+
+
+def add_car(brand, model, year, vin, color, price, mileage):
+    """Добавление нового автомобиля"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO cars (brand, model, year, vin, color, price, status, mileage)
+            VALUES (?, ?, ?, ?, ?, ?, 'в наличии', ?)
+        """, (brand, model, year, vin, color, price, mileage))
+        conn.commit()
+        conn.close()
+        print("✅ Автомобиль добавлен")
+        return True
+    except Exception as e:
+        raise Exception(f"Ошибка при добавлении автомобиля: {e}")
+
+
+def update_car(car_id, brand, model, year, vin, color, price, mileage):
+    """Редактирование данных автомобиля"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE cars
+            SET brand=?, model=?, year=?, vin=?, color=?, price=?, mileage=?
+            WHERE id=?
+        """, (brand, model, year, vin, color, price, mileage, car_id))
+        conn.commit()
+        conn.close()
+        print("✅ Данные автомобиля обновлены")
+    except Exception as e:
+        raise Exception(f"Ошибка при обновлении автомобиля: {e}")
+
+
+def delete_car(car_id):
+    """Удаление автомобиля"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM cars WHERE id = ?", (car_id,))
+        conn.commit()
+        conn.close()
+        print("✅ Автомобиль удален")
+    except Exception as e:
+        raise Exception(f"Ошибка при удалении автомобиля: {e}")
+
+
+# === РАБОТА С ЗАКАЗАМИ И ОТЗЫВАМИ ===
+def create_order(client_id: int, car_id: int, employee_id: int, final_price: float):
+    """Создание нового заказа"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO orders (client_id, car_id, employee_id, final_price, status)
+            VALUES (?, ?, ?, ?, 'оформлен')
+        """, (client_id, car_id, employee_id, final_price))
+        cursor.execute("UPDATE cars SET status = 'продан' WHERE id = ?", (car_id,))
+        conn.commit()
+        conn.close()
+        print("✅ Заказ успешно создан")
+        return True
+    except Exception as e:
+        raise Exception(f"Ошибка при создании заказа: {e}")
+
+
+def get_or_create_client_for_user(user_id: int, username: str) -> int:
+    """Получение ID клиента для user_id"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM clients WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        if row:
+            conn.close()
+            return row[0]
+        cursor.execute("""
+            INSERT INTO clients (first_name, last_name, phone, email, user_id)
+            VALUES (?, ?, '+7-000-000-00-00', ?, ?)
+        """, (username, username, username + "@autodreams.local", user_id))
+        cursor.execute("SELECT SCOPE_IDENTITY()")
+        new_id = int(cursor.fetchone()[0])
+        conn.commit()
+        conn.close()
+        return new_id
+    except Exception as e:
+        raise Exception(f"Ошибка при получении клиента: {e}")
+
+
+def get_client_orders(client_id: int):
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT o.id, c.brand, c.model, c.vin, o.final_price, o.sale_date
+            FROM orders o
+            JOIN cars c ON o.car_id = c.id
+            WHERE o.client_id = ?
+            ORDER BY o.sale_date DESC
+        """, (client_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        orders = []
+        for row in rows:
+            orders.append({
+                'id': row[0],
+                'brand': row[1],
+                'model': row[2],
+                'vin': row[3],
+                'final_price': float(row[4]),
+                'sale_date': row[5]
+            })
+        return orders
+    except Exception as e:
+        raise Exception(f"Ошибка при загрузке заказов: {e}")
+
 
 def add_review(client_id: int, order_id: int, rating: int, comment: str):
     try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO REVIEWS (client_id, order_id, rating, comment, review_date) VALUES (?, ?, ?, ?, GETDATE())",
-                (client_id, order_id, rating, comment)
-            )
-            conn.commit()
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO reviews (client_id, order_id, rating, comment)
+            VALUES (?, ?, ?, ?)
+        """, (client_id, order_id, rating, comment))
+        conn.commit()
+        conn.close()
+        print("✅ Отзыв добавлен")
+        return True
     except Exception as e:
-        print(f"Ошибка при добавлении отзыва: {e}")
-        raise
+        raise Exception(f"Ошибка при добавлении отзыва: {e}")
 
-def get_client_reviews(client_id: int) -> List[Dict[str, Any]]:
-    try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT r.*, c.brand, c.model 
-                FROM REVIEWS r
-                JOIN ORDERS o ON r.order_id = o.id
-                JOIN CARS c ON o.car_id = c.id
-                WHERE r.client_id = ?
-                ORDER BY r.review_date DESC
-            """, (client_id,))
-            
-            rows = cursor.fetchall()
-            reviews = []
-            for row in rows:
-                reviews.append({
-                    'id': row[0],
-                    'client_id': row[1],
-                    'order_id': row[2],
-                    'rating': row[3],
-                    'comment': row[4],
-                    'review_date': row[5],
-                    'brand': row[6],
-                    'model': row[7]
-                })
-            return reviews
-    except Exception as e:
-        print(f"Ошибка при получении отзывов: {e}")
-        return []
 
-def create_order(client_id: int, car_id: int, employee_id: int, final_price: float):
+def get_client_reviews(client_id: int):
     try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                "INSERT INTO ORDERS (client_id, car_id, employee_id, sale_date, final_price, status) VALUES (?, ?, ?, GETDATE(), ?, 'выполнен')",
-                (client_id, car_id, employee_id, final_price)
-            )
-            
-            cursor.execute("UPDATE CARS SET status = 'продан' WHERE id = ?", (car_id,))
-            
-            conn.commit()
-            return True
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT order_id, rating, comment, review_date
+            FROM reviews
+            WHERE client_id = ?
+            ORDER BY review_date DESC
+        """, (client_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        reviews = []
+        for row in rows:
+            reviews.append({
+                'order_id': row[0],
+                'rating': row[1],
+                'comment': row[2],
+                'review_date': row[3]
+            })
+        return reviews
     except Exception as e:
-        print(f"Ошибка при создании заказа: {e}")
-        raise
+        raise Exception(f"Ошибка при загрузке отзывов: {e}")
 
-def get_or_create_client_for_user(user_id: int, username: str):
-    try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT id FROM CLIENTS WHERE user_id = ?", (user_id,))
-            client = cursor.fetchone()
-            
-            if client:
-                return client[0]
-            else:
-                cursor.execute(
-                    "INSERT INTO CLIENTS (first_name, last_name, phone, email, user_id) VALUES (?, ?, ?, ?, ?)",
-                    (username, "User", "+7-000-000-00-00", f"{username}@example.com", user_id)
-                )
-                cursor.execute("SELECT SCOPE_IDENTITY()")
-                new_client_id = cursor.fetchone()[0]
-                conn.commit()
-                return new_client_id
-    except Exception as e:
-        print(f"Ошибка при получении/создании клиента: {e}")
-        return 1
 
 def get_available_employee():
-    """Получаем случайного доступного сотрудника"""
+    """Получение ID доступного сотрудника для оформления заказа"""
     try:
-        with get_conn() as conn:
+        conn = get_conn()
+        cursor = conn.cursor()
+        
+        # Получаем первого доступного сотрудника
+        cursor.execute("SELECT TOP 1 id FROM employees ORDER BY id")
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return row[0]
+        else:
+            # Если нет сотрудников, создаем тестового
+            conn = get_conn()
             cursor = conn.cursor()
-            cursor.execute("SELECT TOP 1 id FROM EMPLOYEES ORDER BY NEWID()")
-            employee = cursor.fetchone()
-            return employee[0] if employee else 1
-    except Exception as e:
-        print(f"Ошибка при получении сотрудника: {e}")
-        return 1
-
-def add_car(brand: str, model: str, year: int, vin: str, color: str, price: float, mileage: int = 0):
-    """Добавить новый автомобиль"""
-    try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO CARS (brand, model, year, vin, color, price, status, mileage) VALUES (?, ?, ?, ?, ?, ?, 'в наличии', ?)",
-                (brand, model, year, vin, color, price, mileage)
-            )
+            cursor.execute("""
+                INSERT INTO employees (first_name, last_name, position, phone, email)
+                VALUES ('Авто', 'Менеджер', 'Продавец', '+7-999-000-00-00', 'manager@autodreams.local')
+            """)
+            cursor.execute("SELECT SCOPE_IDENTITY()")
+            new_id = int(cursor.fetchone()[0])
             conn.commit()
-            return True
-    except Exception as e:
-        print(f"Ошибка при добавлении автомобиля: {e}")
-        raise
-
-def update_car(car_id: int, brand: str, model: str, year: int, vin: str, color: str, price: float, mileage: int):
-    """Обновить данные автомобиля"""
-    try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE CARS SET brand=?, model=?, year=?, vin=?, color=?, price=?, mileage=? WHERE id=?",
-                (brand, model, year, vin, color, price, mileage, car_id)
-            )
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"Ошибка при обновлении автомобиля: {e}")
-        raise
-
-def delete_car(car_id: int):
-    """Удалить автомобиль"""
-    try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM CARS WHERE id = ?", (car_id,))
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"Ошибка при удалении автомобиля: {e}")
-        raise
-
-def get_car_by_id(car_id: int) -> Dict[str, Any]:
-    """Получить автомобиль по ID"""
-    try:
-        with get_conn() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM CARS WHERE id = ?", (car_id,))
-            row = cursor.fetchone()
+            conn.close()
+            return new_id
             
-            if row:
-                return {
-                    'id': row[0],
-                    'brand': row[1],
-                    'model': row[2],
-                    'year': row[3],
-                    'vin': row[4],
-                    'color': row[5],
-                    'price': float(row[6]),
-                    'status': row[7],
-                    'mileage': row[8]
-                }
-            return None
     except Exception as e:
-        print(f"Ошибка при получении автомобиля: {e}")
-        return None
+        print(f"⚠️ Ошибка при получении сотрудника, используем ID=1: {e}")
+        return 1
