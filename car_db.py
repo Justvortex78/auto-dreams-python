@@ -21,7 +21,7 @@ def init_car_db():
             brand NVARCHAR(100),
             model NVARCHAR(100),
             year INT,
-            vin NVARCHAR(50) UNIQUE,
+            vin NVARCHAR(17) UNIQUE,
             color NVARCHAR(50),
             price FLOAT,
             status NVARCHAR(50) DEFAULT 'в наличии',
@@ -87,10 +87,7 @@ def init_car_db():
                 INSERT INTO cars (brand, model, year, vin, color, price, status, mileage)
                 VALUES 
                 ('Toyota', 'Camry', 2023, 'JTNBE46KX83012345', 'Черный', 3300000, 'в наличии', 0),
-                ('BMW', 'X5', 2022, 'WBAKS01040C123456', 'Белый', 7200000, 'в наличии', 1000),
-                ('Mercedes', 'E-Class', 2023, 'W1K1770841V123456', 'Серый', 5800000, 'в наличии', 500),
-                ('Audi', 'A4', 2023, 'WAUZZFY28N0123456', 'Красный', 4200000, 'в наличии', 0),
-                ('Honda', 'Civic', 2023, '2HGFE186XPH123456', 'Синий', 2800000, 'в наличии', 0)
+                ('BMW', 'X5', 2022, 'WBAKS01040C12345', 'Белый', 7200000, 'в наличии', 1000)
             """)
 
         conn.commit()
@@ -181,6 +178,9 @@ def get_car_by_id(car_id: int) -> Optional[Dict[str, Any]]:
 def add_car(brand, model, year, vin, color, price, mileage):
     """Добавление нового автомобиля"""
     try:
+        # Обрезаем VIN до 17 символов если нужно
+        vin = vin[:17] if len(vin) > 17 else vin
+        
         conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("""
@@ -198,6 +198,9 @@ def add_car(brand, model, year, vin, color, price, mileage):
 def update_car(car_id, brand, model, year, vin, color, price, mileage):
     """Редактирование данных автомобиля"""
     try:
+        # Обрезаем VIN до 17 символов если нужно
+        vin = vin[:17] if len(vin) > 17 else vin
+        
         conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("""
@@ -366,3 +369,113 @@ def get_available_employee():
     except Exception as e:
         print(f"⚠️ Ошибка при получении сотрудника, используем ID=1: {e}")
         return 1
+
+
+def get_all_orders():
+    """Получение всех заказов с информацией о клиентах"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                o.id,
+                c.first_name + ' ' + c.last_name as client_name,
+                car.brand,
+                car.model,
+                o.final_price,
+                o.sale_date,
+                e.first_name + ' ' + e.last_name as employee_name
+            FROM orders o
+            JOIN clients c ON o.client_id = c.id
+            JOIN cars car ON o.car_id = car.id
+            JOIN employees e ON o.employee_id = e.id
+            ORDER BY o.sale_date DESC
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        orders = []
+        for row in rows:
+            orders.append({
+                'id': row[0],
+                'client_name': row[1],
+                'brand': row[2],
+                'model': row[3],
+                'final_price': float(row[4]),
+                'sale_date': row[5],
+                'employee_name': row[6]
+            })
+        return orders
+    except Exception as e:
+        raise Exception(f"Ошибка при загрузке всех заказов: {e}")
+
+
+def get_car_quantity(car_id: int) -> int:
+    """Получение количества автомобилей определенной модели в наличии"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM cars 
+            WHERE brand = (SELECT brand FROM cars WHERE id = ?) 
+            AND model = (SELECT model FROM cars WHERE id = ?)
+            AND status = 'в наличии'
+        """, (car_id, car_id))
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+    except Exception as e:
+        print(f"Ошибка при получении количества: {e}")
+        return 0
+
+
+def add_car_quantity(brand: str, model: str, quantity: int):
+    """Добавление нескольких автомобилей одной модели"""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        
+        import random
+        import time
+        
+        added_count = 0
+        
+        for i in range(quantity):
+            try:
+                # Генерируем уникальный VIN для каждого автомобиля
+                base_vin = f"{brand[:3]}{model[:3]}"
+                timestamp = str(int(time.time() * 1000))[-6:]  # последние 6 цифр timestamp
+                random_part = str(random.randint(1000, 9999))
+                unique_vin = base_vin + timestamp + random_part
+                vin = unique_vin[:17]  # Обрезаем до 17 символов
+                
+                # Получаем информацию о цене и годе из существующего автомобиля или используем значения по умолчанию
+                cursor.execute("SELECT price, year FROM cars WHERE brand = ? AND model = ?", (brand, model))
+                existing_car = cursor.fetchone()
+                
+                if existing_car:
+                    price = existing_car[0]
+                    year = existing_car[1]
+                else:
+                    price = 3000000  # цена по умолчанию
+                    year = 2023      # год по умолчанию
+                
+                cursor.execute("""
+                    INSERT INTO cars (brand, model, year, vin, color, price, status, mileage)
+                    VALUES (?, ?, ?, ?, 'Разные цвета', ?, 'в наличии', 0)
+                """, (brand, model, year, vin, price))
+                added_count += 1
+                
+            except Exception as e:
+                if "UNIQUE KEY" in str(e) or "повторяющийся ключ" in str(e):
+                    # Пропускаем этот автомобиль и продолжаем
+                    continue
+                else:
+                    raise e
+        
+        conn.commit()
+        conn.close()
+        return added_count
+        
+    except Exception as e:
+        raise Exception(f"Ошибка при добавлении автомобилей: {e}")

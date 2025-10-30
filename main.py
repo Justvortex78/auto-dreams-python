@@ -1,4 +1,3 @@
-# main.py (исправленный)
 import sys
 import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -12,7 +11,8 @@ from PyQt5.QtGui import QPixmap, QColor, QFont
 from auth_db import init_db, create_user, find_user_by_login_or_email, verify_password, get_conn
 from car_db import (get_available_cars, get_all_cars, get_client_orders, add_review, 
                    get_client_reviews, create_order, get_or_create_client_for_user, 
-                   get_available_employee, add_car, update_car, delete_car, get_car_by_id, init_car_db)
+                   get_available_employee, add_car, update_car, delete_car, get_car_by_id, init_car_db,
+                   get_all_orders, add_car_quantity, get_car_quantity)
 
 COLORS = {
     'primary_bg': '#0f172a',
@@ -239,8 +239,8 @@ class RegisterPage(QWidget):
             max-width: 500px;
             margin: 0 auto;
         """)
-        form_layout = QFormLayout(form_container)
-        form_layout.setSpacing(20)
+        form_layout = QVBoxLayout(form_container)
+        form_layout.setSpacing(15)
         
         self.first_name_input = QLineEdit()
         self.first_name_input.setPlaceholderText("Введите ваше имя")
@@ -266,7 +266,6 @@ class RegisterPage(QWidget):
                 border-radius: 8px;
                 font-size: 14px;
                 font-family: 'Segoe UI';
-                min-width: 300px;
             }}
             QLineEdit:focus {{
                 border-color: {COLORS['accent_green']};
@@ -277,17 +276,25 @@ class RegisterPage(QWidget):
                            self.email_input, self.password_input, self.confirm_password_input]:
             input_field.setStyleSheet(input_style)
         
-        form_layout.addRow("Имя:", self.first_name_input)
-        form_layout.addRow("Фамилия:", self.last_name_input)
-        form_layout.addRow("Логин:", self.username_input)
-        form_layout.addRow("Email:", self.email_input)
-        form_layout.addRow("Пароль:", self.password_input)
-        form_layout.addRow("Подтверждение:", self.confirm_password_input)
+        # Добавляем поля с подписями
+        form_layout.addWidget(QLabel("Имя:"))
+        form_layout.addWidget(self.first_name_input)
+        form_layout.addWidget(QLabel("Фамилия:"))
+        form_layout.addWidget(self.last_name_input)
+        form_layout.addWidget(QLabel("Логин:"))
+        form_layout.addWidget(self.username_input)
+        form_layout.addWidget(QLabel("Email:"))
+        form_layout.addWidget(self.email_input)
+        form_layout.addWidget(QLabel("Пароль:"))
+        form_layout.addWidget(self.password_input)
+        form_layout.addWidget(QLabel("Подтверждение пароля:"))
+        form_layout.addWidget(self.confirm_password_input)
         
-        for i in range(form_layout.rowCount()):
-            label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
-            if label:
-                label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-weight: bold; font-family: 'Segoe UI';")
+        # Стили для подписей
+        for i in range(form_layout.count()):
+            widget = form_layout.itemAt(i).widget()
+            if isinstance(widget, QLabel):
+                widget.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-weight: bold; font-family: 'Segoe UI'; margin-top: 10px;")
         
         btn_register = QPushButton("✅ ЗАРЕГИСТРИРОВАТЬСЯ")
         btn_register.setStyleSheet(f"""
@@ -350,8 +357,10 @@ class RegisterPage(QWidget):
         if password != confirm_password:
             QMessageBox.warning(self, "Ошибка", "Пароли не совпадают")
             return
+        if len(password) < 3:
+            QMessageBox.warning(self, "Ошибка", "Пароль должен содержать минимум 3 символа")
+            return
         try:
-            # ПРАВИЛЬНЫЙ ВЫЗОВ - 5 АРГУМЕНТОВ
             create_user(username, email, password, first_name, last_name)
             QMessageBox.information(self, "Успех", "Регистрация прошла успешно! Теперь вы можете войти.")
             self.go_login()
@@ -445,8 +454,11 @@ class CarCard(QWidget):
         """)
         price_label.setAlignment(Qt.AlignCenter)
 
-        status_label = QLabel(f"Статус: {self.car['status']}")
-        status_color = COLORS['success'] if self.car['status'] == 'в наличии' else COLORS['danger']
+        quantity = self.car.get('quantity', 1)
+        if quantity is None:
+            quantity = 0
+        status_label = QLabel(f"В наличии: {quantity} шт." if quantity > 0 else "НЕТ В НАЛИЧИИ")
+        status_color = COLORS['success'] if quantity > 0 else COLORS['danger']
         status_label.setStyleSheet(f"color: {status_color}; font-size: 12px; font-weight: bold; font-family: 'Segoe UI';")
         status_label.setAlignment(Qt.AlignCenter)
 
@@ -472,8 +484,8 @@ class CarCard(QWidget):
         """)
         btn_details.clicked.connect(self.show_details)
 
-        btn_buy = QPushButton("КУПИТЬ" if self.car['status'] == 'в наличии' else "ПРОДАНО")
-        btn_buy.setEnabled(self.car['status'] == 'в наличии')
+        btn_buy = QPushButton("КУПИТЬ" if quantity > 0 else "НЕТ В НАЛИЧИИ")
+        btn_buy.setEnabled(quantity > 0)
         btn_buy.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
@@ -495,7 +507,7 @@ class CarCard(QWidget):
                 color: {COLORS['text_secondary']};
             }}
         """)
-        if self.car['status'] == 'в наличии':
+        if quantity > 0:
             btn_buy.clicked.connect(self.buy_car)
 
         buttons_layout.addWidget(btn_details)
@@ -517,7 +529,6 @@ class CarCard(QWidget):
                 os.makedirs(images_path)
                 return None
             
-            # Создаем список возможных имен файлов
             possible_filenames = [
                 f"{self.car['brand'].lower()}_{self.car['model'].lower()}.jpg",
                 f"{self.car['brand'].lower()}_{self.car['model'].lower()}.png",
@@ -539,6 +550,7 @@ class CarCard(QWidget):
             return None
 
     def show_details(self):
+        quantity = self.car.get('quantity', 1)
         msg = QMessageBox()
         msg.setWindowTitle(f"🚗 {self.car['brand']} {self.car['model']}")
         msg.setText(f"""
@@ -551,7 +563,7 @@ class CarCard(QWidget):
 <b>VIN:</b> {self.car['vin']}
 <b>Пробег:</b> {self.car.get('mileage', 0):,} км
 <b>Цена:</b> {self.car['price']:,.0f} ₽
-<b>Статус:</b> {self.car['status']}
+<b>В наличии:</b> {quantity} шт.
 
 <b>Описание:</b>
 {self.get_car_description()}
@@ -604,9 +616,12 @@ class CarCard(QWidget):
         return descriptions.get(key, "Качественный автомобиль • Надёжность • Комфорт • Безопасность")
 
     def buy_car(self):
-        if self.car['status'] != 'в наличии':
-            QMessageBox.warning(self, "Внимание", "Этот автомобиль уже продан.")
+        quantity = self.car.get('quantity', 1)
+        if quantity is None:
+            quantity = 0
+            QMessageBox.warning(self, "Внимание", "Этот автомобиль закончился.")
             return
+        
         reply = QMessageBox()
         reply.setWindowTitle("🎯 ПОДТВЕРЖДЕНИЕ ПОКУПКИ")
         reply.setText(f"""
@@ -615,6 +630,7 @@ class CarCard(QWidget):
 {self.car['brand']} {self.car['model']}
 
 <b>ЦЕНА: {self.car['price']:,.0f} ₽</b>
+<b>В наличии: {quantity} шт.</b>
 
 ✅ Гарантия 3 года
 ✅ Бесплатная доставка  
@@ -698,128 +714,7 @@ class CarCard(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось оформить покупку: {str(e)}")
 
-class OrderCard(QWidget):
-    def __init__(self, order):
-        super().__init__()
-        self.order = order
-        self.setup_ui()
 
-    def setup_ui(self):
-        self.setFixedSize(320, 420)
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLORS['secondary_bg']};
-                border: 2px solid {COLORS['accent_green']};
-                border-radius: 12px;
-                margin: 8px;
-            }}
-        """)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-
-        # Изображение автомобиля
-        image_label = QLabel()
-        image_label.setFixedSize(296, 160)
-        image_label.setAlignment(Qt.AlignCenter)
-        image_label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['primary_bg']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                color: {COLORS['text_primary']};
-            }}
-        """)
-        
-        pixmap = self.load_car_image()
-        if pixmap and not pixmap.isNull():
-            pixmap = pixmap.scaled(290, 155, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            image_label.setPixmap(pixmap)
-        else:
-            image_label.setText(f"🚗\n{self.order['brand']}\n{self.order['model']}")
-            image_label.setStyleSheet(f"""
-                QLabel {{
-                    background-color: {COLORS['primary_bg']};
-                    border: 1px solid {COLORS['border']};
-                    border-radius: 8px;
-                    color: {COLORS['accent_green']};
-                    font-size: 14px;
-                    font-weight: bold;
-                    font-family: 'Segoe UI';
-                }}
-            """)
-
-        title_label = QLabel(f"{self.order['brand']} {self.order['model']}")
-        title_label.setStyleSheet(f"""
-            color: {COLORS['text_primary']}; 
-            font-size: 16px; 
-            font-weight: bold;
-            margin-top: 5px;
-            font-family: 'Segoe UI';
-        """)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setWordWrap(True)
-
-        vin_label = QLabel(f"VIN: {self.order['vin']}")
-        vin_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 10px; font-family: 'Segoe UI';")
-        vin_label.setAlignment(Qt.AlignCenter)
-
-        price_label = QLabel(f"{self.order['final_price']:,.0f} ₽")
-        price_label.setStyleSheet(f"""
-            color: {COLORS['accent_green']}; 
-            font-size: 18px; 
-            font-weight: bold;
-            margin: 5px 0;
-            font-family: 'Segoe UI';
-            background-color: {COLORS['primary_bg']};
-            border-radius: 6px;
-            padding: 6px;
-            border: 1px solid {COLORS['border']};
-        """)
-        price_label.setAlignment(Qt.AlignCenter)
-
-        date_label = QLabel(f"Дата: {self.order['sale_date']}")
-        date_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; font-family: 'Segoe UI';")
-        date_label.setAlignment(Qt.AlignCenter)
-
-        status_label = QLabel("✅ ВЫПОЛНЕН")
-        status_label.setStyleSheet(f"color: {COLORS['success']}; font-size: 14px; font-weight: bold; font-family: 'Segoe UI';")
-        status_label.setAlignment(Qt.AlignCenter)
-
-        layout.addWidget(image_label)
-        layout.addWidget(title_label)
-        layout.addWidget(vin_label)
-        layout.addWidget(price_label)
-        layout.addWidget(date_label)
-        layout.addWidget(status_label)
-
-    def load_car_image(self):
-        """Загружаем изображение автомобиля"""
-        try:
-            images_path = os.path.join(os.path.dirname(__file__), "images")
-            
-            if not os.path.exists(images_path):
-                return None
-            
-            # Создаем список возможных имен файлов
-            possible_filenames = [
-                f"{self.order['brand'].lower()}_{self.order['model'].lower()}.jpg",
-                f"{self.order['brand'].lower()}_{self.order['model'].lower()}.png",
-                f"{self.order['brand'].lower()}_{self.order['model'].lower()}.jpeg",
-                "default_car.jpg"
-            ]
-            
-            for filename in possible_filenames:
-                image_path = os.path.join(images_path, filename)
-                if os.path.exists(image_path):
-                    return QPixmap(image_path)
-            
-            return None
-            
-        except Exception as e:
-            print(f"Ошибка загрузки изображения: {e}")
-            return None
 
 class ClientMainMenuPage(QWidget):
     def __init__(self, user, logout_callback):
@@ -852,7 +747,6 @@ class ClientMainMenuPage(QWidget):
             font-family: 'Segoe UI';
         """)
         
-        # Показываем ФИО пользователя
         welcome_text = f"ДОБРО ПОЖАЛОВАТЬ, {self.user['first_name']} {self.user['last_name']}!"
         welcome = QLabel(welcome_text)
         welcome.setAlignment(Qt.AlignCenter)
@@ -947,8 +841,7 @@ class ClientMainMenuPage(QWidget):
 
     def create_menu_button(self, text):
         button = QPushButton(text)
-        # увеличенный минимальный размер чтобы текст не обрезался
-        button.setMinimumSize(420, 70)
+        button.setMinimumSize(350, 60)  # Уменьшил размер кнопок
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(f"""
             QPushButton {{
@@ -956,9 +849,9 @@ class ClientMainMenuPage(QWidget):
                     stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
                 color: {COLORS['text_primary']};
                 border: none;
-                padding: 12px 25px;
+                padding: 12px 20px;
                 border-radius: 10px;
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
                 margin: 5px 0;
                 font-family: 'Segoe UI';
@@ -966,10 +859,6 @@ class ClientMainMenuPage(QWidget):
             QPushButton:hover {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
                     stop:0 #0ea271, stop:1 #0c857a);
-            }}
-            QPushButton:pressed {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #0d9468, stop:1 #0b766c);
             }}
         """)
         return button
@@ -1017,7 +906,6 @@ class EmployeeMainMenuPage(QWidget):
             font-family: 'Segoe UI';
         """)
         
-        # Показываем ФИО сотрудника
         welcome_text = f"ДОБРО ПОЖАЛОВАТЬ, {self.user['first_name']} {self.user['last_name']}!"
         welcome = QLabel(welcome_text)
         welcome.setAlignment(Qt.AlignCenter)
@@ -1049,18 +937,18 @@ class EmployeeMainMenuPage(QWidget):
             font-family: 'Segoe UI';
         """)
         
-        btn_manage_cars = self.create_menu_button("🚗 УПРАВЛЕНИЕ АВТОМОБИЛЯМИ")
-        btn_view_all_cars = self.create_menu_button("📋 ВЕСЬ АССОРТИМЕНТ")
-        btn_realtime_stats = self.create_menu_button("📊 СТАТИСТИКА В РЕАЛЬНОМ ВРЕМЕНИ")
+        btn_manage_stock = self.create_menu_button("📦 УПРАВЛЕНИЕ ЗАПАСАМИ")
+        btn_view_orders = self.create_menu_button("📋 ВСЕ ЗАКАЗЫ")
+        btn_realtime_stats = self.create_menu_button("📊 СТАТИСТИКА")
         btn_exit = self.create_menu_button("🚪 ВЫХОД")
         
-        btn_manage_cars.clicked.connect(self.show_manage_cars)
-        btn_view_all_cars.clicked.connect(self.show_all_cars)
+        btn_manage_stock.clicked.connect(self.show_manage_stock)
+        btn_view_orders.clicked.connect(self.show_all_orders)
         btn_realtime_stats.clicked.connect(self.show_realtime_stats)
         btn_exit.clicked.connect(self.logout_callback)
         
-        menu_layout.addWidget(btn_manage_cars)
-        menu_layout.addWidget(btn_view_all_cars)
+        menu_layout.addWidget(btn_manage_stock)
+        menu_layout.addWidget(btn_view_orders)
         menu_layout.addWidget(btn_realtime_stats)
         menu_layout.addWidget(btn_exit)
         
@@ -1087,9 +975,9 @@ class EmployeeMainMenuPage(QWidget):
         """)
         
         instruction_text = QLabel(
-            "• УПРАВЛЕНИЕ АВТОМОБИЛЯМИ - добавление, редактирование, удаление\n"
-            "• ВЕСЬ АССОРТИМЕНТ - просмотр всех автомобилей (включая проданные)\n"  
-            "• СТАТИСТИКА В РЕАЛЬНОМ ВРЕМЕНИ - актуальные данные о продажах\n"
+            "• УПРАВЛЕНИЕ ЗАПАСАМИ - добавление автомобилей в наличии\n"
+            "• ВСЕ ЗАКАЗЫ - просмотр всех заказов клиентов\n"  
+            "• СТАТИСТИКА - актуальные данные о продажах\n"
             "• ВЫХОД - возврат к окну авторизации"
         )
         instruction_text.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; line-height: 1.5; font-family: 'Segoe UI';")
@@ -1108,8 +996,7 @@ class EmployeeMainMenuPage(QWidget):
 
     def create_menu_button(self, text):
         button = QPushButton(text)
-        # увеличенный минимальный размер чтобы текст не обрезался
-        button.setMinimumSize(420, 70)
+        button.setMinimumSize(350, 60)  # Уменьшил размер кнопок
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(f"""
             QPushButton {{
@@ -1117,9 +1004,9 @@ class EmployeeMainMenuPage(QWidget):
                     stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
                 color: {COLORS['text_primary']};
                 border: none;
-                padding: 12px 25px;
+                padding: 12px 20px;
                 border-radius: 10px;
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
                 margin: 5px 0;
                 font-family: 'Segoe UI';
@@ -1131,14 +1018,320 @@ class EmployeeMainMenuPage(QWidget):
         """)
         return button
 
-    def show_manage_cars(self):
-        self.parent().parent().show_manage_cars_page()
+    def show_manage_stock(self):
+        self.parent().parent().show_manage_stock_page()
     
-    def show_all_cars(self):
-        self.parent().parent().show_all_cars_page()
+    def show_all_orders(self):
+        self.parent().parent().show_all_orders_page()
     
     def show_realtime_stats(self):
         self.parent().parent().show_realtime_stats_page()
+
+class ManageStockPage(QWidget):
+    def __init__(self, user, back_callback):
+        super().__init__()
+        self.user = user
+        self.back_callback = back_callback
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        title = QLabel("УПРАВЛЕНИЕ ЗАПАСАМИ")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            color: {COLORS['accent_green']}; 
+            font-weight: bold; 
+            margin-bottom: 20px;
+            font-family: 'Segoe UI';
+        """)
+        title.setAlignment(Qt.AlignCenter)
+        
+        # Список доступных автомобилей для добавления
+        available_cars = [
+            {"brand": "Toyota", "model": "Camry", "year": 2023, "price": 3300000},
+            {"brand": "BMW", "model": "X5", "year": 2023, "price": 7200000},
+            {"brand": "Mercedes", "model": "E-Class", "year": 2023, "price": 5800000},
+            {"brand": "Audi", "model": "A4", "year": 2023, "price": 4200000},
+            {"brand": "Honda", "model": "Civic", "year": 2023, "price": 2800000},
+            {"brand": "Ford", "model": "Focus", "year": 2023, "price": 2200000},
+            {"brand": "Hyundai", "model": "Tucson", "year": 2023, "price": 3500000},
+            {"brand": "Kia", "model": "Sportage", "year": 2023, "price": 3200000}
+        ]
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background-color: transparent;
+            }}
+        """)
+        
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        
+        for car in available_cars:
+            car_widget = self.create_car_stock_widget(car)
+            container_layout.addWidget(car_widget)
+        
+        container_layout.addStretch()
+        scroll_area.setWidget(container)
+        
+        btn_back = QPushButton("◀ НАЗАД В МЕНЮ")
+        btn_back.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                border: none;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                margin-top: 20px;
+                font-family: 'Segoe UI';
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 #0ea271, stop:1 #0c857a);
+            }}
+        """)
+        btn_back.clicked.connect(self.back_callback)
+        
+        layout.addWidget(title)
+        layout.addWidget(scroll_area)
+        layout.addWidget(btn_back)
+
+    def create_car_stock_widget(self, car):
+        widget = QWidget()
+        widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {COLORS['secondary_bg']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 10px;
+                margin: 5px;
+                padding: 15px;
+            }}
+        """)
+        
+        layout = QHBoxLayout(widget)
+        
+        # Информация об автомобиле
+        info_layout = QVBoxLayout()
+        title_label = QLabel(f"{car['brand']} {car['model']} {car['year']}")
+        title_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 16px; font-weight: bold;")
+        
+        price_label = QLabel(f"{car['price']:,.0f} ₽")
+        price_label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px;")
+        
+        info_layout.addWidget(title_label)
+        info_layout.addWidget(price_label)
+        
+        # Поле для ввода количества
+        quantity_layout = QHBoxLayout()
+        quantity_label = QLabel("Количество:")
+        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        
+        quantity_spin = QSpinBox()
+        quantity_spin.setRange(1, 100)
+        quantity_spin.setValue(1)
+        quantity_spin.setStyleSheet(f"""
+            QSpinBox {{
+                background-color: {COLORS['primary_bg']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 5px;
+                padding: 5px;
+            }}
+        """)
+        
+        quantity_layout.addWidget(quantity_label)
+        quantity_layout.addWidget(quantity_spin)
+        quantity_layout.addStretch()
+        
+        info_layout.addLayout(quantity_layout)
+        
+        # Кнопка добавления
+        btn_add = QPushButton("➕ ДОБАВИТЬ")
+        btn_add.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                border: none;
+                padding: 8px 15px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 #0ea271, stop:1 #0c857a);
+            }}
+        """)
+        
+        def add_car_stock():
+            quantity = quantity_spin.value()
+            try:
+                import random
+                import time
+                
+                added_count = 0
+                errors = []
+                
+                for i in range(quantity):
+                    try:
+                        # Генерируем уникальный VIN для каждого автомобиля
+                        base_vin = f"{car['brand'][:3]}{car['model'][:3]}"
+                        timestamp = str(int(time.time() * 1000))[-6:]  # последние 6 цифр timestamp
+                        random_part = str(random.randint(1000, 9999))
+                        unique_vin = base_vin + timestamp + random_part
+                        vin = unique_vin[:17]  # Обрезаем до 17 символов
+                        
+                        add_car(
+                            car['brand'], 
+                            car['model'], 
+                            car['year'], 
+                            vin,
+                            "Разные цвета", 
+                            car['price'], 
+                            0
+                        )
+                        added_count += 1
+                        
+                    except Exception as e:
+                        if "UNIQUE KEY" in str(e) or "повторяющийся ключ" in str(e):
+                            # Если VIN уже существует, генерируем новый и пробуем снова
+                            continue
+                        else:
+                            errors.append(str(e))
+                
+                if added_count > 0:
+                    if errors:
+                        QMessageBox.information(self, "✅ УСПЕХ (с предупреждениями)", 
+                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
+                                              f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
+                    else:
+                        QMessageBox.information(self, "✅ УСПЕХ", 
+                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
+                else:
+                    QMessageBox.critical(self, "❌ ОШИБКА", 
+                                       f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
+                
+                quantity_spin.setValue(1)
+                
+            except Exception as e:
+                QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось добавить автомобили: {str(e)}")
+        
+        btn_add.clicked.connect(add_car_stock)
+        
+        layout.addLayout(info_layout)
+        layout.addWidget(btn_add)
+        
+        return widget
+
+class AllOrdersPage(QWidget):
+    def __init__(self, user, back_callback):
+        super().__init__()
+        self.user = user
+        self.back_callback = back_callback
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        title = QLabel("ВСЕ ЗАКАЗЫ КЛИЕНТОВ")
+        title.setStyleSheet(f"""
+            font-size: 28px; 
+            color: {COLORS['accent_green']}; 
+            font-weight: bold; 
+            margin-bottom: 20px;
+            font-family: 'Segoe UI';
+        """)
+        title.setAlignment(Qt.AlignCenter)
+        
+        self.table = QTableWidget()
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {COLORS['secondary_bg']};
+                color: {COLORS['text_primary']};
+                gridline-color: {COLORS['border']};
+                border: 2px solid {COLORS['accent_green']};
+                border-radius: 8px;
+                font-family: 'Segoe UI';
+            }}
+            QTableWidget::item {{
+                padding: 10px;
+                border-bottom: 1px solid {COLORS['border']};
+                color: {COLORS['text_primary']};
+            }}
+            QTableWidget::item:selected {{
+                background-color: {COLORS['accent_green']};
+                color: {COLORS['text_primary']};
+            }}
+            QHeaderView::section {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                padding: 12px;
+                font-weight: bold;
+                border: none;
+                font-family: 'Segoe UI';
+            }}
+        """)
+        
+        btn_back = QPushButton("◀ НАЗАД В МЕНЮ")
+        btn_back.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                border: none;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                margin-top: 20px;
+                font-family: 'Segoe UI';
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 #0ea271, stop:1 #0c857a);
+            }}
+        """)
+        btn_back.clicked.connect(self.back_callback)
+        
+        layout.addWidget(title)
+        layout.addWidget(self.table)
+        layout.addWidget(btn_back)
+        
+        self.load_orders()
+
+    def load_orders(self):
+        try:
+            orders = get_all_orders()
+            
+            self.table.setRowCount(len(orders))
+            self.table.setColumnCount(6)
+            self.table.setHorizontalHeaderLabels(["ID заказа", "Клиент", "Автомобиль", "Цена", "Дата", "Менеджер"])
+            
+            for row, order in enumerate(orders):
+                self.table.setItem(row, 0, QTableWidgetItem(str(order['id'])))
+                self.table.setItem(row, 1, QTableWidgetItem(f"{order['client_name']}"))
+                self.table.setItem(row, 2, QTableWidgetItem(f"{order['brand']} {order['model']}"))
+                self.table.setItem(row, 3, QTableWidgetItem(f"{order['final_price']:,.0f} ₽"))
+                self.table.setItem(row, 4, QTableWidgetItem(str(order['sale_date'])))
+                self.table.setItem(row, 5, QTableWidgetItem(f"{order['employee_name']}"))
+            
+            self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить заказы: {str(e)}")
 
 class CarCatalogPage(QWidget):
     def __init__(self, user, back_callback):
@@ -1223,12 +1416,14 @@ class CarCatalogPage(QWidget):
 
     def load_cars(self):
         try:
+            # Очищаем предыдущие карточки
             for i in reversed(range(self.cards_layout.count())): 
                 widget = self.cards_layout.itemAt(i).widget()
                 if widget:
                     widget.setParent(None)
             
             cars = get_available_cars()
+            print(f"✅ Загружено {len(cars)} автомобилей")
             
             if not cars:
                 no_cars_label = QLabel("В НАСТОЯЩЕЕ ВРЕМЯ НЕТ ДОСТУПНЫХ АВТОМОБИЛЕЙ")
@@ -1240,10 +1435,15 @@ class CarCatalogPage(QWidget):
             for i, car in enumerate(cars):
                 row = i // 3
                 col = i % 3
-                car_card = CarCard(car, self.user, self.load_cars)
-                self.cards_layout.addWidget(car_card, row, col)
+                try:
+                    car_card = CarCard(car, self.user, self.load_cars)
+                    self.cards_layout.addWidget(car_card, row, col)
+                except Exception as e:
+                    print(f"❌ Ошибка создания карточки для {car['brand']} {car['model']}: {e}")
+                    continue
                 
         except Exception as e:
+            print(f"❌ Ошибка загрузки автомобилей: {e}")
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
 
 class AllCarsPage(QWidget):
@@ -1353,21 +1553,19 @@ class AllCarsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
 
-class ManageCarsPage(QWidget):
+class ManageStockPage(QWidget):
     def __init__(self, user, back_callback):
         super().__init__()
         self.user = user
         self.back_callback = back_callback
         self.setup_ui()
-        # Загружаем таблицу при создании
-        self.load_cars()
 
     def setup_ui(self):
         self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         
-        title = QLabel("УПРАВЛЕНИЕ АВТОМОБИЛЯМИ")
+        title = QLabel("УПРАВЛЕНИЕ ЗАПАСАМИ")
         title.setStyleSheet(f"""
             font-size: 28px; 
             color: {COLORS['accent_green']}; 
@@ -1377,193 +1575,36 @@ class ManageCarsPage(QWidget):
         """)
         title.setAlignment(Qt.AlignCenter)
         
-        # Форма добавления автомобиля
-        form_container = QWidget()
-        form_container.setStyleSheet(f"""
-            background-color: {COLORS['secondary_bg']};
-            border: 2px solid {COLORS['accent_green']};
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 20px;
-        """)
-        form_layout = QFormLayout(form_container)
-        form_layout.setSpacing(15)
+        # Список доступных автомобилей для добавления
+        available_cars = [
+            {"brand": "Toyota", "model": "Camry", "year": 2023, "price": 3300000},
+            {"brand": "BMW", "model": "X5", "year": 2023, "price": 7200000},
+            {"brand": "Mercedes", "model": "E-Class", "year": 2023, "price": 5800000},
+            {"brand": "Audi", "model": "A4", "year": 2023, "price": 4200000},
+            {"brand": "Honda", "model": "Civic", "year": 2023, "price": 2800000},
+            {"brand": "Ford", "model": "Focus", "year": 2023, "price": 2200000},
+            {"brand": "Hyundai", "model": "Tucson", "year": 2023, "price": 3500000},
+            {"brand": "Kia", "model": "Sportage", "year": 2023, "price": 3200000}
+        ]
         
-        self.brand_edit = QLineEdit()
-        self.brand_edit.setPlaceholderText("Например: Toyota")
-        self.model_edit = QLineEdit()
-        self.model_edit.setPlaceholderText("Например: Camry")
-        self.year_spin = QSpinBox()
-        self.year_spin.setRange(2000, 2030)
-        self.year_spin.setValue(2024)
-        self.vin_edit = QLineEdit()
-        self.vin_edit.setPlaceholderText("17-значный VIN")
-        self.color_edit = QLineEdit()
-        self.color_edit.setPlaceholderText("Например: Черный")
-        self.price_spin = QSpinBox()
-        self.price_spin.setRange(0, 100000000)
-        self.price_spin.setValue(1000000)
-        self.price_spin.setSuffix(" ₽")
-        self.mileage_spin = QSpinBox()
-        self.mileage_spin.setRange(0, 1000000)
-        self.mileage_spin.setValue(0)
-        self.mileage_spin.setSuffix(" км")
-        
-        input_style = f"""
-            QLineEdit, QSpinBox {{
-                background-color: {COLORS['secondary_bg']};
-                color: {COLORS['text_primary']};
-                padding: 10px;
-                border: 1px solid {COLORS['border']};
-                border-radius: 6px;
-                font-size: 14px;
-                font-family: 'Segoe UI';
-            }}
-            QLineEdit:focus, QSpinBox:focus {{
-                border-color: {COLORS['accent_green']};
-                background-color: {COLORS['secondary_bg']};
-            }}
-            QSpinBox::up-button, QSpinBox::down-button {{
-                background-color: {COLORS['accent_green']};
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
                 border: none;
-                border-radius: 3px;
-            }}
-        """
-        
-        for edit in [self.brand_edit, self.model_edit, self.vin_edit, self.color_edit]:
-            edit.setStyleSheet(input_style)
-        self.year_spin.setStyleSheet(input_style)
-        self.price_spin.setStyleSheet(input_style)
-        self.mileage_spin.setStyleSheet(input_style)
-        
-        form_layout.addRow("Марка:", self.brand_edit)
-        form_layout.addRow("Модель:", self.model_edit)
-        form_layout.addRow("Год:", self.year_spin)
-        form_layout.addRow("VIN:", self.vin_edit)
-        form_layout.addRow("Цвет:", self.color_edit)
-        form_layout.addRow("Цена:", self.price_spin)
-        form_layout.addRow("Пробег:", self.mileage_spin)
-        
-        for i in range(form_layout.rowCount()):
-            label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
-            if label:
-                label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-family: 'Segoe UI'; font-weight: bold;")
-        
-        btn_add = QPushButton("➕ ДОБАВИТЬ АВТОМОБИЛЬ")
-        btn_add.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: bold;
-                margin-top: 15px;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #0ea271, stop:1 #0c857a);
-            }}
-        """)
-        btn_add.clicked.connect(self.add_car)
-        
-        # Таблица автомобилей
-        self.table = QTableWidget()
-        self.table.setStyleSheet(f"""
-            QTableWidget {{
-                background-color: {COLORS['secondary_bg']};
-                color: {COLORS['text_primary']};
-                gridline-color: {COLORS['border']};
-                border: 2px solid {COLORS['accent_green']};
-                border-radius: 8px;
-                font-family: 'Segoe UI';
-            }}
-            QTableWidget::item {{
-                padding: 10px;
-                border-bottom: 1px solid {COLORS['border']};
-                color: {COLORS['text_primary']};
-            }}
-            QTableWidget::item:selected {{
-                background-color: {COLORS['accent_green']};
-                color: {COLORS['text_primary']};
-            }}
-            QHeaderView::section {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
-                color: {COLORS['text_primary']};
-                padding: 12px;
-                font-weight: bold;
-                border: none;
-                font-family: 'Segoe UI';
+                background-color: transparent;
             }}
         """)
         
-        # Кнопки управления
-        buttons_layout = QHBoxLayout()
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
         
-        btn_edit = QPushButton("✏️ РЕДАКТИРОВАТЬ")
-        btn_edit.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #0ea271, stop:1 #0c857a);
-            }}
-        """)
-        btn_edit.clicked.connect(self.edit_car)
+        for car in available_cars:
+            car_widget = self.create_car_stock_widget(car)
+            container_layout.addWidget(car_widget)
         
-        btn_delete = QPushButton("🗑️ УДАЛИТЬ")
-        btn_delete.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['danger']};
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background-color: #dc2626;
-            }}
-        """)
-        btn_delete.clicked.connect(self.delete_car)
-        
-        btn_refresh = QPushButton("🔄 ОБНОВИТЬ")
-        btn_refresh.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['accent_teal']};
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background-color: #0f766e;
-            }}
-        """)
-        btn_refresh.clicked.connect(self.load_cars)
-        
-        buttons_layout.addWidget(btn_edit)
-        buttons_layout.addWidget(btn_delete)
-        buttons_layout.addWidget(btn_refresh)
-        buttons_layout.addStretch()
+        container_layout.addStretch()
+        scroll_area.setWidget(container)
         
         btn_back = QPushButton("◀ НАЗАД В МЕНЮ")
         btn_back.setStyleSheet(f"""
@@ -1587,257 +1628,136 @@ class ManageCarsPage(QWidget):
         btn_back.clicked.connect(self.back_callback)
         
         layout.addWidget(title)
-        layout.addWidget(form_container)
-        layout.addWidget(btn_add)
-        layout.addWidget(self.table)
-        layout.addLayout(buttons_layout)
+        layout.addWidget(scroll_area)
         layout.addWidget(btn_back)
-        
-    def add_car(self):
-        try:
-            brand = self.brand_edit.text().strip()
-            model = self.model_edit.text().strip()
-            year = self.year_spin.value()
-            vin = self.vin_edit.text().strip()
-            color = self.color_edit.text().strip()
-            price = self.price_spin.value()
-            mileage = self.mileage_spin.value()
-            
-            if not brand or not model or not vin or not color:
-                QMessageBox.warning(self, "ВНИМАНИЕ", "Заполните все поля.")
-                return
-                
-            if len(vin) != 17:
-                QMessageBox.warning(self, "ВНИМАНИЕ", "VIN должен содержать 17 символов.")
-                return
 
-            # Проверяем наличие изображения в папке images перед добавлением
-            images_path = os.path.join(os.path.dirname(__file__), "images")
-            if not os.path.exists(images_path):
-                # если папки нет — считаем, что изображения нет
-                QMessageBox.warning(self, "ВНИМАНИЕ", "Папка images не найдена. Поместите изображение в папку 'images'.")
-                return
-
-            # Возможные имена изображений (brand_model в нижнем регистре)
-            normalized_brand = brand.strip().lower().replace(" ", "_")
-            normalized_model = model.strip().lower().replace(" ", "_")
-            possible_filenames = [
-                f"{normalized_brand}_{normalized_model}.jpg",
-                f"{normalized_brand}_{normalized_model}.png",
-                f"{normalized_brand}_{normalized_model}.jpeg",
-                f"{normalized_brand}-{normalized_model}.jpg",
-                f"{normalized_brand}-{normalized_model}.png",
-                f"{normalized_brand}{normalized_model}.jpg",
-                f"{normalized_brand}{normalized_model}.png"
-            ]
-            image_found = False
-            for fn in possible_filenames:
-                if os.path.exists(os.path.join(images_path, fn)):
-                    image_found = True
-                    break
-
-            if not image_found:
-                QMessageBox.warning(self, "ВНИМАНИЕ", 
-                    f"Изображение для {brand} {model} не найдено в папке 'images'.\n"
-                    f"Имена файлов, принимаемые системой: {', '.join(possible_filenames[:3])}\n"
-                    "Пожалуйста, добавьте фото и повторите.")
-                return
-            
-            # Если изображение есть — добавляем автомобиль
-            add_car(brand, model, year, vin, color, price, mileage)
-            QMessageBox.information(self, "✅ УСПЕХ", "Автомобиль успешно добавлен!")
-            
-            # Очищаем форму
-            self.brand_edit.clear()
-            self.model_edit.clear()
-            self.vin_edit.clear()
-            self.color_edit.clear()
-            self.price_spin.setValue(1000000)
-            self.mileage_spin.setValue(0)
-            
-            # Обновляем таблицу (real-time визуальный отклик)
-            self.load_cars()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось добавить автомобиль: {str(e)}")
-
-    def edit_car(self):
-        selected_row = self.table.currentRow()
-        if selected_row == -1:
-            QMessageBox.warning(self, "ВНИМАНИЕ", "Выберите автомобиль для редактирования.")
-            return
-        car_id = int(self.table.item(selected_row, 0).text())
-        car = get_car_by_id(car_id)
-        if not car:
-            QMessageBox.critical(self, "❌ ОШИБКА", "Не удалось загрузить данные автомобиля.")
-            return
-        # Диалог редактирования (как у тебя был)...
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Редактирование автомобиля")
-        dialog.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
-        dialog.setFixedSize(400, 500)
-        layout = QVBoxLayout(dialog)
-        title = QLabel("РЕДАКТИРОВАНИЕ АВТОМОБИЛЯ")
-        title.setStyleSheet(f"""
-            font-size: 20px; 
-            color: {COLORS['accent_green']}; 
-            font-weight: bold; 
-            margin-bottom: 20px;
-            font-family: 'Segoe UI';
-        """)
-        title.setAlignment(Qt.AlignCenter)
-        form_layout = QFormLayout()
-        form_layout.setSpacing(15)
-        brand_edit = QLineEdit(car['brand'])
-        model_edit = QLineEdit(car['model'])
-        year_spin = QSpinBox()
-        year_spin.setRange(2000, 2030)
-        year_spin.setValue(car['year'])
-        vin_edit = QLineEdit(car['vin'])
-        color_edit = QLineEdit(car['color'])
-        price_spin = QSpinBox()
-        price_spin.setRange(0, 100000000)
-        price_spin.setValue(int(car['price']))
-        price_spin.setSuffix(" ₽")
-        mileage_spin = QSpinBox()
-        mileage_spin.setRange(0, 1000000)
-        mileage_spin.setValue(car['mileage'])
-        mileage_spin.setSuffix(" км")
-        input_style = f"""
-            QLineEdit, QSpinBox {{
+    def create_car_stock_widget(self, car):
+        widget = QWidget()
+        widget.setStyleSheet(f"""
+            QWidget {{
                 background-color: {COLORS['secondary_bg']};
-                color: {COLORS['text_primary']};
-                padding: 10px;
                 border: 1px solid {COLORS['border']};
-                border-radius: 6px;
-                font-size: 14px;
-                font-family: 'Segoe UI';
+                border-radius: 10px;
+                margin: 5px;
+                padding: 15px;
             }}
-        """
-        for edit in [brand_edit, model_edit, vin_edit, color_edit]:
-            edit.setStyleSheet(input_style)
-        year_spin.setStyleSheet(input_style)
-        price_spin.setStyleSheet(input_style)
-        mileage_spin.setStyleSheet(input_style)
-        form_layout.addRow("Марка:", brand_edit)
-        form_layout.addRow("Модель:", model_edit)
-        form_layout.addRow("Год:", year_spin)
-        form_layout.addRow("VIN:", vin_edit)
-        form_layout.addRow("Цвет:", color_edit)
-        form_layout.addRow("Цена:", price_spin)
-        form_layout.addRow("Пробег:", mileage_spin)
-        for i in range(form_layout.rowCount()):
-            label = form_layout.itemAt(i, QFormLayout.LabelRole).widget()
-            if label:
-                label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px; font-family: 'Segoe UI'; font-weight: bold;")
-        btn_save = QPushButton("💾 СОХРАНИТЬ")
-        btn_save.setStyleSheet(f"""
+        """)
+        
+        layout = QHBoxLayout(widget)
+        
+        # Информация об автомобиле
+        info_layout = QVBoxLayout()
+        title_label = QLabel(f"{car['brand']} {car['model']} {car['year']}")
+        title_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 16px; font-weight: bold;")
+        
+        price_label = QLabel(f"{car['price']:,.0f} ₽")
+        price_label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px;")
+        
+        info_layout.addWidget(title_label)
+        info_layout.addWidget(price_label)
+        
+        # Поле для ввода количества
+        quantity_layout = QHBoxLayout()
+        quantity_label = QLabel("Количество:")
+        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        
+        quantity_spin = QSpinBox()
+        quantity_spin.setRange(1, 100)
+        quantity_spin.setValue(1)
+        quantity_spin.setStyleSheet(f"""
+            QSpinBox {{
+                background-color: {COLORS['primary_bg']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 5px;
+                padding: 5px;
+            }}
+        """)
+        
+        quantity_layout.addWidget(quantity_label)
+        quantity_layout.addWidget(quantity_spin)
+        quantity_layout.addStretch()
+        
+        info_layout.addLayout(quantity_layout)
+        
+        # Кнопка добавления
+        btn_add = QPushButton("➕ ДОБАВИТЬ")
+        btn_add.setStyleSheet(f"""
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
                     stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
                 color: {COLORS['text_primary']};
                 border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-size: 16px;
+                padding: 8px 15px;
+                border-radius: 6px;
+                font-size: 12px;
                 font-weight: bold;
-                margin-top: 15px;
-                font-family: 'Segoe UI';
             }}
             QPushButton:hover {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
                     stop:0 #0ea271, stop:1 #0c857a);
             }}
         """)
-        btn_cancel = QPushButton("❌ ОТМЕНА")
-        btn_cancel.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['danger']};
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background-color: #dc2626;
-            }}
-        """)
-        def save_changes():
+        
+        def add_car_stock():
+            quantity = quantity_spin.value()
             try:
-                # если бренд или модель поменялись, стоит предупредить о соответствии фото отдельно (но мы просто обновляем данные)
-                update_car(
-                    car_id,
-                    brand_edit.text().strip(),
-                    model_edit.text().strip(),
-                    year_spin.value(),
-                    vin_edit.text().strip(),
-                    color_edit.text().strip(),
-                    price_spin.value(),
-                    mileage_spin.value()
-                )
-                QMessageBox.information(dialog, "✅ УСПЕХ", "Данные автомобиля обновлены!")
-                dialog.accept()
-                self.load_cars()
-            except Exception as e:
-                QMessageBox.critical(dialog, "❌ ОШИБКА", f"Не удалось обновить данные: {str(e)}")
-        btn_save.clicked.connect(save_changes)
-        btn_cancel.clicked.connect(dialog.reject)
-        layout.addWidget(title)
-        layout.addLayout(form_layout)
-        layout.addWidget(btn_save)
-        layout.addWidget(btn_cancel)
-        if dialog.exec() == QDialog.Accepted:
-            self.load_cars()
-
-    def delete_car(self):
-        selected_row = self.table.currentRow()
-        if selected_row == -1:
-            QMessageBox.warning(self, "ВНИМАНИЕ", "Выберите автомобиль для удаления.")
-            return
-        car_id = int(self.table.item(selected_row, 0).text())
-        brand = self.table.item(selected_row, 1).text()
-        model = self.table.item(selected_row, 2).text()
-        reply = QMessageBox.question(
-            self, 
-            "Подтверждение удаления",
-            f"Вы уверены, что хотите удалить автомобиль {brand} {model}?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            try:
-                delete_car(car_id)
-                QMessageBox.information(self, "✅ УСПЕХ", "Автомобиль успешно удален!")
-                self.load_cars()
-            except Exception as e:
-                QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось удалить автомобиль: {str(e)}")
-
-    def load_cars(self):
-        try:
-            cars = get_all_cars()
-            self.table.setRowCount(len(cars))
-            self.table.setColumnCount(8)
-            self.table.setHorizontalHeaderLabels(["ID", "Марка", "Модель", "Год", "VIN", "Цвет", "Цена", "Статус"])
-            for row, car in enumerate(cars):
-                self.table.setItem(row, 0, QTableWidgetItem(str(car['id'])))
-                self.table.setItem(row, 1, QTableWidgetItem(car['brand']))
-                self.table.setItem(row, 2, QTableWidgetItem(car['model']))
-                self.table.setItem(row, 3, QTableWidgetItem(str(car['year'])))
-                self.table.setItem(row, 4, QTableWidgetItem(car['vin']))
-                self.table.setItem(row, 5, QTableWidgetItem(car['color']))
-                self.table.setItem(row, 6, QTableWidgetItem(f"{car['price']:,.0f} ₽"))
-                status_item = QTableWidgetItem(car['status'])
-                if car['status'] == 'в наличии':
-                    status_item.setForeground(QColor(COLORS['success']))
+                import random
+                import time
+                
+                added_count = 0
+                errors = []
+                
+                for i in range(quantity):
+                    try:
+                        # Генерируем уникальный VIN для каждого автомобиля
+                        base_vin = f"{car['brand'][:3]}{car['model'][:3]}"
+                        timestamp = str(int(time.time() * 1000))[-6:]  # последние 6 цифр timestamp
+                        random_part = str(random.randint(1000, 9999))
+                        unique_vin = base_vin + timestamp + random_part
+                        vin = unique_vin[:17]  # Обрезаем до 17 символов
+                        
+                        add_car(
+                            car['brand'], 
+                            car['model'], 
+                            car['year'], 
+                            vin,
+                            "Разные цвета", 
+                            car['price'], 
+                            0
+                        )
+                        added_count += 1
+                        
+                    except Exception as e:
+                        if "UNIQUE KEY" in str(e) or "повторяющийся ключ" in str(e):
+                            # Если VIN уже существует, генерируем новый и пробуем снова
+                            continue
+                        else:
+                            errors.append(str(e))
+                
+                if added_count > 0:
+                    if errors:
+                        QMessageBox.information(self, "✅ УСПЕХ (с предупреждениями)", 
+                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
+                                              f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
+                    else:
+                        QMessageBox.information(self, "✅ УСПЕХ", 
+                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
                 else:
-                    status_item.setForeground(QColor(COLORS['danger']))
-                self.table.setItem(row, 7, status_item)
-            self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        except Exception as e:
-            QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
+                    QMessageBox.critical(self, "❌ ОШИБКА", 
+                                       f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
+                
+                quantity_spin.setValue(1)
+                
+            except Exception as e:
+                QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось добавить автомобили: {str(e)}")
+        
+        btn_add.clicked.connect(add_car_stock)
+        
+        layout.addLayout(info_layout)
+        layout.addWidget(btn_add)
+        
+        return widget
 
 class RealtimeStatsPage(QWidget):
     def __init__(self, user, back_callback):
@@ -2015,33 +1935,35 @@ class OrdersPage(QWidget):
         """)
         title.setAlignment(Qt.AlignCenter)
         
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setStyleSheet(f"""
-            QScrollArea {{
-                border: none;
-                background-color: transparent;
-            }}
-            QScrollBar:vertical {{
+        self.table = QTableWidget()
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
                 background-color: {COLORS['secondary_bg']};
-                width: 10px;
-                margin: 0px;
-                border-radius: 5px;
+                color: {COLORS['text_primary']};
+                gridline-color: {COLORS['border']};
+                border: 2px solid {COLORS['accent_green']};
+                border-radius: 8px;
+                font-family: 'Segoe UI';
             }}
-            QScrollBar::handle:vertical {{
+            QTableWidget::item {{
+                padding: 10px;
+                border-bottom: 1px solid {COLORS['border']};
+                color: {COLORS['text_primary']};
+            }}
+            QTableWidget::item:selected {{
                 background-color: {COLORS['accent_green']};
-                min-height: 20px;
-                border-radius: 5px;
+                color: {COLORS['text_primary']};
+            }}
+            QHeaderView::section {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
+                color: {COLORS['text_primary']};
+                padding: 12px;
+                font-weight: bold;
+                border: none;
+                font-family: 'Segoe UI';
             }}
         """)
-        
-        self.orders_container = QWidget()
-        self.orders_layout = QGridLayout(self.orders_container)
-        self.orders_layout.setAlignment(Qt.AlignTop)
-        self.orders_layout.setHorizontalSpacing(15)
-        self.orders_layout.setVerticalSpacing(15)
-        self.orders_layout.setContentsMargins(10, 10, 10, 10)
-        scroll_area.setWidget(self.orders_container)
         
         btn_back = QPushButton("◀ НАЗАД В МЕНЮ")
         btn_back.setStyleSheet(f"""
@@ -2065,33 +1987,29 @@ class OrdersPage(QWidget):
         btn_back.clicked.connect(self.back_callback)
         
         layout.addWidget(title)
-        layout.addWidget(scroll_area)
+        layout.addWidget(self.table)
         layout.addWidget(btn_back)
         
         self.load_orders()
 
     def load_orders(self):
         try:
-            for i in reversed(range(self.orders_layout.count())): 
-                widget = self.orders_layout.itemAt(i).widget()
-                if widget:
-                    widget.setParent(None)
-            
             client_id = get_or_create_client_for_user(self.user['id'], self.user['username'])
             orders = get_client_orders(client_id)
             
-            if not orders:
-                no_orders_label = QLabel("У ВАС ПОКА НЕТ ЗАКАЗОВ")
-                no_orders_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 16px; font-family: 'Segoe UI';")
-                no_orders_label.setAlignment(Qt.AlignCenter)
-                self.orders_layout.addWidget(no_orders_label, 0, 0, 1, 3)
-                return
+            self.table.setRowCount(len(orders))
+            self.table.setColumnCount(6)
+            self.table.setHorizontalHeaderLabels(["ID заказа", "Марка", "Модель", "VIN", "Цена", "Дата заказа"])
             
-            for i, order in enumerate(orders):
-                row = i // 3
-                col = i % 3
-                order_card = OrderCard(order)
-                self.orders_layout.addWidget(order_card, row, col)
+            for row, order in enumerate(orders):
+                self.table.setItem(row, 0, QTableWidgetItem(str(order['id'])))
+                self.table.setItem(row, 1, QTableWidgetItem(order['brand']))
+                self.table.setItem(row, 2, QTableWidgetItem(order['model']))
+                self.table.setItem(row, 3, QTableWidgetItem(order['vin']))
+                self.table.setItem(row, 4, QTableWidgetItem(f"{order['final_price']:,.0f} ₽"))
+                self.table.setItem(row, 5, QTableWidgetItem(str(order['sale_date'])))
+            
+            self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить заказы: {str(e)}")
@@ -2406,6 +2324,7 @@ class MainWindow(QMainWindow):
     
     def handle_login_success(self, user):
         self.user = user
+        print(f"✅ Вход выполнен: {user['username']} (роль: {user['role']})")
         
         if user['role'] == 'employee' or user['role'] == 'admin':
             self.main_menu = EmployeeMainMenuPage(user, logout_callback=self.show_login)
@@ -2414,21 +2333,28 @@ class MainWindow(QMainWindow):
             
         self.stacked.addWidget(self.main_menu)
         self.stacked.setCurrentWidget(self.main_menu)
+        print("✅ Главное меню загружено")
     
     def show_car_catalog(self):
-        self.car_catalog = CarCatalogPage(self.user, back_callback=self.show_main_menu)
-        self.stacked.addWidget(self.car_catalog)
-        self.stacked.setCurrentWidget(self.car_catalog)
+        print("🔄 Открытие каталога автомобилей...")
+        try:
+            self.car_catalog = CarCatalogPage(self.user, back_callback=self.show_main_menu)
+            self.stacked.addWidget(self.car_catalog)
+            self.stacked.setCurrentWidget(self.car_catalog)
+            print("✅ Каталог автомобилей открыт")
+        except Exception as e:
+            print(f"❌ Ошибка открытия каталога: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть каталог: {str(e)}")
     
-    def show_all_cars_page(self):
-        self.all_cars = AllCarsPage(self.user, back_callback=self.show_main_menu)
-        self.stacked.addWidget(self.all_cars)
-        self.stacked.setCurrentWidget(self.all_cars)
+    def show_manage_stock_page(self):
+        self.manage_stock = ManageStockPage(self.user, back_callback=self.show_main_menu)
+        self.stacked.addWidget(self.manage_stock)
+        self.stacked.setCurrentWidget(self.manage_stock)
     
-    def show_manage_cars_page(self):
-        self.manage_cars = ManageCarsPage(self.user, back_callback=self.show_main_menu)
-        self.stacked.addWidget(self.manage_cars)
-        self.stacked.setCurrentWidget(self.manage_cars)
+    def show_all_orders_page(self):
+        self.all_orders = AllOrdersPage(self.user, back_callback=self.show_main_menu)
+        self.stacked.addWidget(self.all_orders)
+        self.stacked.setCurrentWidget(self.all_orders)
     
     def show_realtime_stats_page(self):
         self.realtime_stats = RealtimeStatsPage(self.user, back_callback=self.show_main_menu)
