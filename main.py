@@ -617,25 +617,19 @@ class CarCard(QWidget):
 
     def buy_car(self):
         quantity = self.car.get('quantity', 1)
-        if quantity is None:
-            quantity = 0
+        if quantity <= 0:
             QMessageBox.warning(self, "Внимание", "Этот автомобиль закончился.")
             return
         
         reply = QMessageBox()
         reply.setWindowTitle("🎯 ПОДТВЕРЖДЕНИЕ ПОКУПКИ")
         reply.setText(f"""
-<b style='color: {COLORS['accent_green']};'>ПОДТВЕРДИТЕ ПОКУПКУ:</b>
+    <b style='color: {COLORS['accent_green']};'>ПОДТВЕРДИТЕ ПОКУПКУ:</b>
 
-{self.car['brand']} {self.car['model']}
+    {self.car['brand']} {self.car['model']}
 
-<b>ЦЕНА: {self.car['price']:,.0f} ₽</b>
-<b>В наличии: {quantity} шт.</b>
-
-✅ Гарантия 3 года
-✅ Бесплатная доставка  
-✅ Первое ТО в подарок
-✅ Коврики в салон
+    <b>ЦЕНА: {self.car['price']:,.0f} ₽</b>
+    <b>В наличии: {quantity} шт.</b>
         """)
         reply.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         reply.setDefaultButton(QMessageBox.No)
@@ -671,22 +665,22 @@ class CarCard(QWidget):
                 client_id = get_or_create_client_for_user(self.user['id'], self.user['username'])
                 employee_id = get_available_employee()
                 
+                # Используем обновленную функцию создания заказа
                 create_order(client_id, self.car['id'], employee_id, self.car['price'])
                 
                 success_msg = QMessageBox()
                 success_msg.setWindowTitle("🎉 ПОЗДРАВЛЕНИЯ!")
                 success_msg.setText(f"""
-<b style='color: {COLORS['accent_green']};'>ПОКУПКА УСПЕШНО ОФОРМЛЕНА!</b>
+    <b style='color: {COLORS['accent_green']};'>ПОКУПКА УСПЕШНО ОФОРМЛЕНА!</b>
 
-{self.car['brand']} {self.car['model']}
+    {self.car['brand']} {self.car['model']}
 
-<b>ЦЕНА: {self.car['price']:,.0f} ₽</b>
+    <b>ЦЕНА: {self.car['price']:,.0f} ₽</b>
 
-📅 Доставка: 3 рабочих дня
-📞 Менеджер свяжется в течение 1 часа
-🎁 Бонусы: Первое ТО + коврики
+    📅 Доставка: 3 рабочих дня
+    📞 Менеджер свяжется в течение 1 часа
 
-Спасибо за покупку! 🚗✨
+    Спасибо за покупку! 🚗✨
                 """)
                 success_msg.setStyleSheet(f"""
                     QMessageBox {{
