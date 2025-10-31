@@ -322,6 +322,21 @@ def add_review(client_id: int, order_id: int, rating: int, comment: str):
     try:
         conn = get_conn()
         cursor = conn.cursor()
+        
+        # Проверяем, принадлежит ли заказ этому клиенту
+        cursor.execute("SELECT id FROM orders WHERE id = ? AND client_id = ?", (order_id, client_id))
+        order = cursor.fetchone()
+        
+        if not order:
+            raise Exception("Этот заказ не принадлежит вам или не существует")
+        
+        # Проверяем, не оставлял ли клиент уже отзыв на этот заказ
+        cursor.execute("SELECT id FROM reviews WHERE order_id = ? AND client_id = ?", (order_id, client_id))
+        existing_review = cursor.fetchone()
+        
+        if existing_review:
+            raise Exception("Вы уже оставляли отзыв на этот заказ")
+        
         cursor.execute("""
             INSERT INTO reviews (client_id, order_id, rating, comment)
             VALUES (?, ?, ?, ?)
@@ -334,16 +349,32 @@ def add_review(client_id: int, order_id: int, rating: int, comment: str):
         raise Exception(f"Ошибка при добавлении отзыва: {e}")
 
 
-def get_client_reviews(client_id: int):
+def get_client_reviews(client_id=None):
+    """Получение отзывов - если указан client_id, то только его отзывы, иначе все отзывы"""
     try:
         conn = get_conn()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT order_id, rating, comment, review_date
-            FROM reviews
-            WHERE client_id = ?
-            ORDER BY review_date DESC
-        """, (client_id,))
+        
+        if client_id:
+            # Получаем отзывы только для конкретного клиента
+            cursor.execute("""
+                SELECT r.order_id, r.rating, r.comment, r.review_date, 
+                       c.first_name + ' ' + c.last_name as client_name
+                FROM reviews r
+                JOIN clients c ON r.client_id = c.id
+                WHERE r.client_id = ?
+                ORDER BY r.review_date DESC
+            """, (client_id,))
+        else:
+            # Получаем все отзывы
+            cursor.execute("""
+                SELECT r.order_id, r.rating, r.comment, r.review_date, 
+                       c.first_name + ' ' + c.last_name as client_name
+                FROM reviews r
+                JOIN clients c ON r.client_id = c.id
+                ORDER BY r.review_date DESC
+            """)
+            
         rows = cursor.fetchall()
         conn.close()
         reviews = []
@@ -352,7 +383,8 @@ def get_client_reviews(client_id: int):
                 'order_id': row[0],
                 'rating': row[1],
                 'comment': row[2],
-                'review_date': row[3]
+                'review_date': row[3],
+                'client_name': row[4]  # Добавляем имя клиента
             })
         return reviews
     except Exception as e:

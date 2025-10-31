@@ -781,7 +781,7 @@ class ClientMainMenuPage(QWidget):
         btn_assortment = self.create_menu_button("📦 АССОРТИМЕНТ АВТОМОБИЛЕЙ")
         btn_orders = self.create_menu_button("📋 МОИ ЗАКАЗЫ")
         btn_reviews = self.create_menu_button("⭐ ОСТАВИТЬ ОТЗЫВ")
-        btn_my_reviews = self.create_menu_button("📝 МОИ ОТЗЫВЫ")
+        btn_my_reviews = self.create_menu_button("📝 ОТЗЫВЫ КЛИЕНТОВ")
         btn_exit = self.create_menu_button("🚪 ВЫХОД")
         
         btn_assortment.clicked.connect(self.show_assortment)
@@ -822,7 +822,7 @@ class ClientMainMenuPage(QWidget):
             "• АССОРТИМЕНТ - просмотр и покупка автомобилей\n"
             "• МОИ ЗАКАЗЫ - история ваших покупок\n"  
             "• ОСТАВИТЬ ОТЗЫВ - написать отзыв о покупке\n"
-            "• МОИ ОТЗЫВЫ - просмотр ваших отзывов\n"
+            "• ОТЗЫВЫ КЛИЕНТОВ - просмотр отзывов всех клиентов\n"
             "• ВЫХОД - возврат к окну авторизации"
         )
         instruction_text.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px; line-height: 1.5; font-family: 'Segoe UI';")
@@ -2020,6 +2020,11 @@ class ReviewsPage(QWidget):
         """)
         title.setAlignment(Qt.AlignCenter)
         
+        # Добавляем информацию о доступных заказах
+        orders_info = QLabel("Вы можете оставить отзыв только на свои завершенные заказы")
+        orders_info.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 14px; font-family: 'Segoe UI'; margin-bottom: 10px;")
+        orders_info.setAlignment(Qt.AlignCenter)
+        
         form_container = QWidget()
         form_container.setStyleSheet(f"""
             background-color: {COLORS['secondary_bg']};
@@ -2031,7 +2036,7 @@ class ReviewsPage(QWidget):
         form_layout.setSpacing(15)
         
         self.order_id_edit = QLineEdit()
-        self.order_id_edit.setPlaceholderText("Введите ID заказа")
+        self.order_id_edit.setPlaceholderText("Введите ID вашего заказа")
         self.rating_spin = QSpinBox()
         self.rating_spin.setRange(1, 5)
         self.rating_spin.setValue(5)
@@ -2115,6 +2120,7 @@ class ReviewsPage(QWidget):
         btn_back.clicked.connect(self.back_callback)
         
         layout.addWidget(title)
+        layout.addWidget(orders_info)
         layout.addWidget(form_container)
         layout.addWidget(btn_submit)
         layout.addWidget(btn_back)
@@ -2156,7 +2162,7 @@ class MyReviewsPage(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         
-        title = QLabel("МОИ ОТЗЫВЫ")
+        title = QLabel("ОТЗЫВЫ КЛИЕНТОВ")
         title.setStyleSheet(f"""
             font-size: 28px; 
             color: {COLORS['accent_green']}; 
@@ -2225,25 +2231,34 @@ class MyReviewsPage(QWidget):
 
     def load_reviews(self):
         try:
-            client_id = get_or_create_client_for_user(self.user['id'], self.user['username'])
-            reviews = get_client_reviews(client_id)
+            # Получаем все отзывы (без указания client_id)
+            reviews = get_client_reviews()  # Теперь работает без параметра
             
             self.table.setRowCount(len(reviews))
-            self.table.setColumnCount(4)
-            self.table.setHorizontalHeaderLabels(["Заказ", "Оценка", "Комментарий", "Дата"])
+            self.table.setColumnCount(4)  # Увеличили до 4 колонок
+            self.table.setHorizontalHeaderLabels(["Клиент", "Оценка", "Отзыв", "Дата"])
             
             for row, review in enumerate(reviews):
-                self.table.setItem(row, 0, QTableWidgetItem(f"Заказ #{review['order_id']}"))
+                # Колонка с именем клиента
+                client_name = review.get('client_name', 'Неизвестный клиент')
+                self.table.setItem(row, 0, QTableWidgetItem(client_name))
                 
+                # Колонка с рейтингом (звездочки)
                 rating_stars = "★" * review['rating'] + "☆" * (5 - review['rating'])
-                self.table.setItem(row, 1, QTableWidgetItem(rating_stars))
+                rating_item = QTableWidgetItem(rating_stars)
+                rating_item.setForeground(QColor(COLORS['accent_green']))
+                self.table.setItem(row, 1, rating_item)
                 
+                # Колонка с комментарием
                 comment = review['comment'] if review['comment'] else "Без комментария"
                 self.table.setItem(row, 2, QTableWidgetItem(comment))
+                
+                # Колонка с датой
                 self.table.setItem(row, 3, QTableWidgetItem(str(review['review_date'])))
             
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            self.table.resizeColumnToContents(1)
+            self.table.resizeColumnToContents(0)  # Подгоняем ширину колонки с именем
+            self.table.resizeColumnToContents(1)  # Подгоняем ширину колонки с рейтингом
             
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить отзывы: {str(e)}")
