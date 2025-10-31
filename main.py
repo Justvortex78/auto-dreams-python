@@ -521,32 +521,38 @@ class CarCard(QWidget):
         layout.addLayout(buttons_layout)
 
     def load_car_image(self):
-        """Загружаем изображение автомобиля"""
+        """Загружаем изображение автомобиля по названию из папки"""
         try:
             images_path = os.path.join(os.path.dirname(__file__), "images")
             
-            if not os.path.exists(images_path):
-                os.makedirs(images_path)
-                return None
+            # Просто сопоставляем бренд и модель с названиями файлов
+            brand = self.car['brand']
+            model = self.car['model']
             
-            possible_filenames = [
-                f"{self.car['brand'].lower()}_{self.car['model'].lower()}.jpg",
-                f"{self.car['brand'].lower()}_{self.car['model'].lower()}.png",
-                f"{self.car['brand'].lower()}_{self.car['model'].lower()}.jpeg",
-                f"{self.car['id']}.jpg",
-                f"{self.car['id']}.png",
+            # Создаем имя файла как в папке
+            filename = f"{brand}_{model}.jpg"
+            image_path = os.path.join(images_path, filename)
+            
+            if os.path.exists(image_path):
+                return QPixmap(image_path)
+            
+            # Если не нашли, пробуем другие варианты
+            alternative_names = [
+                f"{brand}_{model}.jpg",
+                f"{brand}_{model}.png", 
+                f"{brand}_{model}.jpeg",
                 "default_car.jpg"
             ]
             
-            for filename in possible_filenames:
-                image_path = os.path.join(images_path, filename)
-                if os.path.exists(image_path):
-                    return QPixmap(image_path)
+            for name in alternative_names:
+                path = os.path.join(images_path, name)
+                if os.path.exists(path):
+                    return QPixmap(path)
             
             return None
-            
+                
         except Exception as e:
-            print(f"Ошибка загрузки изображения: {e}")
+            print(f"❌ Ошибка загрузки изображения: {e}")
             return None
 
     def show_details(self):
@@ -1044,15 +1050,18 @@ class ManageStockPage(QWidget):
         title.setAlignment(Qt.AlignCenter)
         
         # Список доступных автомобилей для добавления
+        # В классе ManageStockPage замени список available_cars на этот:
         available_cars = [
-            {"brand": "Toyota", "model": "Camry", "year": 2023, "price": 3300000},
-            {"brand": "BMW", "model": "X5", "year": 2023, "price": 7200000},
-            {"brand": "Mercedes", "model": "E-Class", "year": 2023, "price": 5800000},
-            {"brand": "Audi", "model": "A4", "year": 2023, "price": 4200000},
-            {"brand": "Honda", "model": "Civic", "year": 2023, "price": 2800000},
-            {"brand": "Ford", "model": "Focus", "year": 2023, "price": 2200000},
-            {"brand": "Hyundai", "model": "Tucson", "year": 2023, "price": 3500000},
-            {"brand": "Kia", "model": "Sportage", "year": 2023, "price": 3200000}
+            {"brand": "Audi", "model": "A5", "year": 2023, "price": 4200000},
+            {"brand": "BMW", "model": "M5", "year": 2023, "price": 8500000},
+            {"brand": "Hyundai", "model": "Creta", "year": 2023, "price": 1800000},
+            {"brand": "Kia", "model": "Rio", "year": 2023, "price": 1200000},
+            {"brand": "Lada", "model": "Niva", "year": 2023, "price": 800000},
+            {"brand": "Mercedes", "model": "Benz CLS 63 AMG", "year": 2023, "price": 9500000},
+            {"brand": "Nissan", "model": "Qashqai", "year": 2023, "price": 2200000},
+            {"brand": "Skoda", "model": "Octavia", "year": 2023, "price": 1600000},
+            {"brand": "Toyota", "model": "Land Cruiser", "year": 2023, "price": 6500000},
+            {"brand": "Volkswagen", "model": "Tiguan", "year": 2023, "price": 2400000}
         ]
         
         scroll_area = QScrollArea()
@@ -1121,13 +1130,35 @@ class ManageStockPage(QWidget):
         price_label = QLabel(f"{car['price']:,.0f} ₽")
         price_label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px;")
         
+        # Поле для названия изображения
+        image_layout = QHBoxLayout()
+        image_label = QLabel("Файл изображения:")
+        image_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        
+        image_input = QLineEdit()
+        image_input.setPlaceholderText(f"{car['brand']}_{car['model']}.jpg")
+        image_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLORS['primary_bg']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }}
+        """)
+        
+        image_layout.addWidget(image_label)
+        image_layout.addWidget(image_input)
+        
         info_layout.addWidget(title_label)
         info_layout.addWidget(price_label)
+        info_layout.addLayout(image_layout)
         
         # Поле для ввода количества
         quantity_layout = QHBoxLayout()
         quantity_label = QLabel("Количество:")
-        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         
         quantity_spin = QSpinBox()
         quantity_spin.setRange(1, 100)
@@ -1169,6 +1200,17 @@ class ManageStockPage(QWidget):
         
         def add_car_stock():
             quantity = quantity_spin.value()
+            image_filename = image_input.text().strip() or f"{car['brand']}_{car['model']}.jpg"
+            
+            # Проверяем, есть ли такой файл в папке images
+            images_path = os.path.join(os.path.dirname(__file__), "images")
+            image_path = os.path.join(images_path, image_filename)
+            
+            if not os.path.exists(image_path):
+                QMessageBox.warning(self, "⚠️ ВНИМАНИЕ", 
+                                f"Файл '{image_filename}' не найден в папке images!\n"
+                                f"Автомобиль будет добавлен без изображения.")
+            
             try:
                 import random
                 import time
@@ -1180,11 +1222,12 @@ class ManageStockPage(QWidget):
                     try:
                         # Генерируем уникальный VIN для каждого автомобиля
                         base_vin = f"{car['brand'][:3]}{car['model'][:3]}"
-                        timestamp = str(int(time.time() * 1000))[-6:]  # последние 6 цифр timestamp
+                        timestamp = str(int(time.time() * 1000))[-6:]
                         random_part = str(random.randint(1000, 9999))
                         unique_vin = base_vin + timestamp + random_part
-                        vin = unique_vin[:17]  # Обрезаем до 17 символов
+                        vin = unique_vin[:17]
                         
+                        # Добавляем автомобиль
                         add_car(
                             car['brand'], 
                             car['model'], 
@@ -1198,7 +1241,6 @@ class ManageStockPage(QWidget):
                         
                     except Exception as e:
                         if "UNIQUE KEY" in str(e) or "повторяющийся ключ" in str(e):
-                            # Если VIN уже существует, генерируем новый и пробуем снова
                             continue
                         else:
                             errors.append(str(e))
@@ -1206,16 +1248,17 @@ class ManageStockPage(QWidget):
                 if added_count > 0:
                     if errors:
                         QMessageBox.information(self, "✅ УСПЕХ (с предупреждениями)", 
-                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
-                                              f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
+                                            f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
+                                            f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
                     else:
                         QMessageBox.information(self, "✅ УСПЕХ", 
-                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
+                                            f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
                 else:
                     QMessageBox.critical(self, "❌ ОШИБКА", 
-                                       f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
+                                    f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
                 
                 quantity_spin.setValue(1)
+                image_input.clear()
                 
             except Exception as e:
                 QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось добавить автомобили: {str(e)}")
@@ -1435,7 +1478,7 @@ class CarCatalogPage(QWidget):
                 except Exception as e:
                     print(f"❌ Ошибка создания карточки для {car['brand']} {car['model']}: {e}")
                     continue
-                
+                    
         except Exception as e:
             print(f"❌ Ошибка загрузки автомобилей: {e}")
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
@@ -1547,84 +1590,6 @@ class AllCarsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
 
-class ManageStockPage(QWidget):
-    def __init__(self, user, back_callback):
-        super().__init__()
-        self.user = user
-        self.back_callback = back_callback
-        self.setup_ui()
-
-    def setup_ui(self):
-        self.setStyleSheet(f"background-color: {COLORS['primary_bg']};")
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        title = QLabel("УПРАВЛЕНИЕ ЗАПАСАМИ")
-        title.setStyleSheet(f"""
-            font-size: 28px; 
-            color: {COLORS['accent_green']}; 
-            font-weight: bold; 
-            margin-bottom: 20px;
-            font-family: 'Segoe UI';
-        """)
-        title.setAlignment(Qt.AlignCenter)
-        
-        # Список доступных автомобилей для добавления
-        available_cars = [
-            {"brand": "Toyota", "model": "Camry", "year": 2023, "price": 3300000},
-            {"brand": "BMW", "model": "X5", "year": 2023, "price": 7200000},
-            {"brand": "Mercedes", "model": "E-Class", "year": 2023, "price": 5800000},
-            {"brand": "Audi", "model": "A4", "year": 2023, "price": 4200000},
-            {"brand": "Honda", "model": "Civic", "year": 2023, "price": 2800000},
-            {"brand": "Ford", "model": "Focus", "year": 2023, "price": 2200000},
-            {"brand": "Hyundai", "model": "Tucson", "year": 2023, "price": 3500000},
-            {"brand": "Kia", "model": "Sportage", "year": 2023, "price": 3200000}
-        ]
-        
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setStyleSheet(f"""
-            QScrollArea {{
-                border: none;
-                background-color: transparent;
-            }}
-        """)
-        
-        container = QWidget()
-        container_layout = QVBoxLayout(container)
-        
-        for car in available_cars:
-            car_widget = self.create_car_stock_widget(car)
-            container_layout.addWidget(car_widget)
-        
-        container_layout.addStretch()
-        scroll_area.setWidget(container)
-        
-        btn_back = QPushButton("◀ НАЗАД В МЕНЮ")
-        btn_back.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 10px 20px;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: bold;
-                margin-top: 20px;
-                font-family: 'Segoe UI';
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #0ea271, stop:1 #0c857a);
-            }}
-        """)
-        btn_back.clicked.connect(self.back_callback)
-        
-        layout.addWidget(title)
-        layout.addWidget(scroll_area)
-        layout.addWidget(btn_back)
-
     def create_car_stock_widget(self, car):
         widget = QWidget()
         widget.setStyleSheet(f"""
@@ -1647,13 +1612,35 @@ class ManageStockPage(QWidget):
         price_label = QLabel(f"{car['price']:,.0f} ₽")
         price_label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px;")
         
+        # Поле для названия изображения
+        image_layout = QHBoxLayout()
+        image_label = QLabel("Файл изображения:")
+        image_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
+        
+        image_input = QLineEdit()
+        image_input.setPlaceholderText(f"{car['brand']}_{car['model']}.jpg")
+        image_input.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLORS['primary_bg']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 5px;
+                padding: 5px;
+                font-size: 12px;
+            }}
+        """)
+        
+        image_layout.addWidget(image_label)
+        image_layout.addWidget(image_input)
+        
         info_layout.addWidget(title_label)
         info_layout.addWidget(price_label)
+        info_layout.addLayout(image_layout)
         
         # Поле для ввода количества
         quantity_layout = QHBoxLayout()
         quantity_label = QLabel("Количество:")
-        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
         
         quantity_spin = QSpinBox()
         quantity_spin.setRange(1, 100)
@@ -1695,6 +1682,8 @@ class ManageStockPage(QWidget):
         
         def add_car_stock():
             quantity = quantity_spin.value()
+            image_filename = image_input.text().strip() or f"{car['brand']}_{car['model']}.jpg"
+            
             try:
                 import random
                 import time
@@ -1706,11 +1695,12 @@ class ManageStockPage(QWidget):
                     try:
                         # Генерируем уникальный VIN для каждого автомобиля
                         base_vin = f"{car['brand'][:3]}{car['model'][:3]}"
-                        timestamp = str(int(time.time() * 1000))[-6:]  # последние 6 цифр timestamp
+                        timestamp = str(int(time.time() * 1000))[-6:]
                         random_part = str(random.randint(1000, 9999))
                         unique_vin = base_vin + timestamp + random_part
-                        vin = unique_vin[:17]  # Обрезаем до 17 символов
+                        vin = unique_vin[:17]
                         
+                        # Добавляем автомобиль с указанием изображения
                         add_car(
                             car['brand'], 
                             car['model'], 
@@ -1724,7 +1714,6 @@ class ManageStockPage(QWidget):
                         
                     except Exception as e:
                         if "UNIQUE KEY" in str(e) or "повторяющийся ключ" in str(e):
-                            # Если VIN уже существует, генерируем новый и пробуем снова
                             continue
                         else:
                             errors.append(str(e))
@@ -1732,16 +1721,17 @@ class ManageStockPage(QWidget):
                 if added_count > 0:
                     if errors:
                         QMessageBox.information(self, "✅ УСПЕХ (с предупреждениями)", 
-                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
-                                              f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
+                                            f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
+                                            f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
                     else:
                         QMessageBox.information(self, "✅ УСПЕХ", 
-                                              f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
+                                            f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
                 else:
                     QMessageBox.critical(self, "❌ ОШИБКА", 
-                                       f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
+                                    f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
                 
                 quantity_spin.setValue(1)
+                image_input.clear()
                 
             except Exception as e:
                 QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось добавить автомобили: {str(e)}")

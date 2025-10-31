@@ -234,15 +234,19 @@ def create_order(client_id: int, car_id: int, employee_id: int, final_price: flo
     try:
         conn = get_conn()
         cursor = conn.cursor()
+        
         cursor.execute("""
             INSERT INTO orders (client_id, car_id, employee_id, final_price, status)
             VALUES (?, ?, ?, ?, 'оформлен')
         """, (client_id, car_id, employee_id, final_price))
+        
         cursor.execute("UPDATE cars SET status = 'продан' WHERE id = ?", (car_id,))
+        
         conn.commit()
         conn.close()
         print("✅ Заказ успешно создан")
         return True
+        
     except Exception as e:
         raise Exception(f"Ошибка при создании заказа: {e}")
 
@@ -252,20 +256,36 @@ def get_or_create_client_for_user(user_id: int, username: str) -> int:
     try:
         conn = get_conn()
         cursor = conn.cursor()
+        
+        # Проверяем, есть ли клиент с таким user_id
         cursor.execute("SELECT id FROM clients WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
+        
         if row:
             conn.close()
             return row[0]
+            
+        # Если нет, создаем нового клиента
+        # Получаем данные пользователя
+        cursor.execute("SELECT first_name, last_name, email FROM users WHERE id = ?", (user_id,))
+        user_data = cursor.fetchone()
+        
+        if user_data:
+            first_name, last_name, email = user_data
+        else:
+            first_name, last_name, email = username, username, f"{username}@autodreams.com"
+        
         cursor.execute("""
-            INSERT INTO clients (first_name, last_name, phone, email, user_id)
-            VALUES (?, ?, '+7-000-000-00-00', ?, ?)
-        """, (username, username, username + "@autodreams.local", user_id))
+            INSERT INTO clients (user_id, first_name, last_name, phone, email)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, first_name, last_name, '+7-000-000-00-00', email))
+        
         cursor.execute("SELECT SCOPE_IDENTITY()")
         new_id = int(cursor.fetchone()[0])
         conn.commit()
         conn.close()
         return new_id
+        
     except Exception as e:
         raise Exception(f"Ошибка при получении клиента: {e}")
 
