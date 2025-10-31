@@ -127,20 +127,29 @@ def create_user(username: str, email: str, password: str, first_name: str, last_
 
         cursor = conn.cursor()
 
+        # Проверяем, существует ли пользователь с таким логином или email
         cursor.execute("SELECT id FROM users WHERE username = ? OR email = ?", (username, email))
         if cursor.fetchone():
             raise Exception("Пользователь с таким логином или email уже существует")
 
         password_hash = hash_password(password)
 
+        # Вставляем пользователя
         cursor.execute("""
             INSERT INTO users (username, email, password_hash, role, first_name, last_name)
             VALUES (?, ?, ?, 'client', ?, ?)
         """, (username, email, password_hash, first_name, last_name))
 
-        cursor.execute("SELECT SCOPE_IDENTITY()")
-        user_id = int(cursor.fetchone()[0])
+        # Получаем ID нового пользователя
+        cursor.execute("SELECT @@IDENTITY")
+        user_id_result = cursor.fetchone()
+        
+        if not user_id_result or user_id_result[0] is None:
+            raise Exception("Не удалось получить ID нового пользователя")
+        
+        user_id = int(user_id_result[0])
 
+        # Создаем запись клиента
         cursor.execute("""
             INSERT INTO clients (first_name, last_name, phone, email, user_id)
             VALUES (?, ?, ?, ?, ?)
@@ -152,6 +161,10 @@ def create_user(username: str, email: str, password: str, first_name: str, last_
         return True
 
     except Exception as e:
+        # Откатываем транзакцию в случае ошибки
+        if 'conn' in locals():
+            conn.rollback()
+            conn.close()
         raise Exception(f"Ошибка при создании пользователя: {str(e)}")
 
 
