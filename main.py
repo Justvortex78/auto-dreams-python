@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QColor, QFont
 
-# Импортируем также get_conn для realtime stats
+
 from auth_db import init_db, create_user, find_user_by_login_or_email, verify_password, get_conn
 from car_db import (get_available_cars, get_all_cars, get_client_orders, add_review, 
                    get_client_reviews, create_order, get_or_create_client_for_user, 
@@ -159,7 +159,7 @@ class LoginPage(QWidget):
         """)
         btn_register.clicked.connect(self.go_register)
         
-        info_label = QLabel("🔑 Тестовые пользователи:\nАдмин: admin/admin\nКлиенты: client1/123, client2/123")
+        info_label = QLabel("🔑 Тестовые пользователи:\nСотрудник: admin/admin\nКлиенты: client1/123, client2/123")
         info_label.setAlignment(Qt.AlignCenter)
         info_label.setStyleSheet(f"""
             color: {COLORS['text_secondary']};
@@ -193,20 +193,15 @@ class LoginPage(QWidget):
             QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
             return
         
-        print(f"🔐 Попытка входа: {username}")
-    
         try:
             user = find_user_by_login_or_email(username)
         
             if user and verify_password(password, user['password_hash']):
-                print(f"✅ Вход выполнен: {user['username']} (роль: {user['role']})")
                 self.on_login_success(user)
             else:
-                print("❌ Неверный логин или пароль")
                 QMessageBox.warning(self, "Ошибка", "Неверный логин или пароль")
             
         except Exception as e:
-            print(f"❌ Ошибка при входе: {e}")
             QMessageBox.critical(self, "Ошибка", f"Ошибка подключения к базе данных:\n{str(e)}")
 
 class RegisterPage(QWidget):
@@ -276,7 +271,7 @@ class RegisterPage(QWidget):
                            self.email_input, self.password_input, self.confirm_password_input]:
             input_field.setStyleSheet(input_style)
         
-        # Добавляем поля с подписями
+        
         form_layout.addWidget(QLabel("Имя:"))
         form_layout.addWidget(self.first_name_input)
         form_layout.addWidget(QLabel("Фамилия:"))
@@ -290,7 +285,7 @@ class RegisterPage(QWidget):
         form_layout.addWidget(QLabel("Подтверждение пароля:"))
         form_layout.addWidget(self.confirm_password_input)
         
-        # Стили для подписей
+        
         for i in range(form_layout.count()):
             widget = form_layout.itemAt(i).widget()
             if isinstance(widget, QLabel):
@@ -394,7 +389,7 @@ class CarCard(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        # Изображение автомобиля
+       
         image_label = QLabel()
         image_label.setFixedSize(296, 160)
         image_label.setAlignment(Qt.AlignCenter)
@@ -525,18 +520,15 @@ class CarCard(QWidget):
         try:
             images_path = os.path.join(os.path.dirname(__file__), "images")
             
-            # Просто сопоставляем бренд и модель с названиями файлов
             brand = self.car['brand']
             model = self.car['model']
             
-            # Создаем имя файла как в папке
             filename = f"{brand}_{model}.jpg"
             image_path = os.path.join(images_path, filename)
             
             if os.path.exists(image_path):
                 return QPixmap(image_path)
             
-            # Если не нашли, пробуем другие варианты
             alternative_names = [
                 f"{brand}_{model}.jpg",
                 f"{brand}_{model}.png", 
@@ -551,8 +543,7 @@ class CarCard(QWidget):
             
             return None
                 
-        except Exception as e:
-            print(f"❌ Ошибка загрузки изображения: {e}")
+        except Exception:
             return None
 
     def show_details(self):
@@ -671,7 +662,6 @@ class CarCard(QWidget):
                 client_id = get_or_create_client_for_user(self.user['id'], self.user['username'])
                 employee_id = get_available_employee()
                 
-                # Используем обновленную функцию создания заказа
                 create_order(client_id, self.car['id'], employee_id, self.car['price'])
                 
                 success_msg = QMessageBox()
@@ -713,8 +703,6 @@ class CarCard(QWidget):
                 
             except Exception as e:
                 QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось оформить покупку: {str(e)}")
-
-
 
 class ClientMainMenuPage(QWidget):
     def __init__(self, user, logout_callback):
@@ -841,7 +829,7 @@ class ClientMainMenuPage(QWidget):
 
     def create_menu_button(self, text):
         button = QPushButton(text)
-        button.setMinimumSize(350, 60)  # Уменьшил размер кнопок
+        button.setMinimumSize(350, 60)  
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(f"""
             QPushButton {{
@@ -996,7 +984,7 @@ class EmployeeMainMenuPage(QWidget):
 
     def create_menu_button(self, text):
         button = QPushButton(text)
-        button.setMinimumSize(350, 60)  # Уменьшил размер кнопок
+        button.setMinimumSize(350, 60)  
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(f"""
             QPushButton {{
@@ -1049,8 +1037,6 @@ class ManageStockPage(QWidget):
         """)
         title.setAlignment(Qt.AlignCenter)
         
-        # Список доступных автомобилей для добавления
-        # В классе ManageStockPage замени список available_cars на этот:
         available_cars = [
             {"brand": "Audi", "model": "A5", "year": 2023, "price": 4200000},
             {"brand": "BMW", "model": "M5", "year": 2023, "price": 8500000},
@@ -1122,7 +1108,6 @@ class ManageStockPage(QWidget):
         
         layout = QHBoxLayout(widget)
         
-        # Информация об автомобиле
         info_layout = QVBoxLayout()
         title_label = QLabel(f"{car['brand']} {car['model']} {car['year']}")
         title_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 16px; font-weight: bold;")
@@ -1130,7 +1115,6 @@ class ManageStockPage(QWidget):
         price_label = QLabel(f"{car['price']:,.0f} ₽")
         price_label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px;")
         
-        # Поле для названия изображения
         image_layout = QHBoxLayout()
         image_label = QLabel("Файл изображения:")
         image_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
@@ -1155,7 +1139,6 @@ class ManageStockPage(QWidget):
         info_layout.addWidget(price_label)
         info_layout.addLayout(image_layout)
         
-        # Поле для ввода количества
         quantity_layout = QHBoxLayout()
         quantity_label = QLabel("Количество:")
         quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
@@ -1179,7 +1162,6 @@ class ManageStockPage(QWidget):
         
         info_layout.addLayout(quantity_layout)
         
-        # Кнопка добавления
         btn_add = QPushButton("➕ ДОБАВИТЬ")
         btn_add.setStyleSheet(f"""
             QPushButton {{
@@ -1202,7 +1184,6 @@ class ManageStockPage(QWidget):
             quantity = quantity_spin.value()
             image_filename = image_input.text().strip() or f"{car['brand']}_{car['model']}.jpg"
             
-            # Проверяем, есть ли такой файл в папке images
             images_path = os.path.join(os.path.dirname(__file__), "images")
             image_path = os.path.join(images_path, image_filename)
             
@@ -1220,14 +1201,12 @@ class ManageStockPage(QWidget):
                 
                 for i in range(quantity):
                     try:
-                        # Генерируем уникальный VIN для каждого автомобиля
                         base_vin = f"{car['brand'][:3]}{car['model'][:3]}"
                         timestamp = str(int(time.time() * 1000))[-6:]
                         random_part = str(random.randint(1000, 9999))
                         unique_vin = base_vin + timestamp + random_part
                         vin = unique_vin[:17]
                         
-                        # Добавляем автомобиль
                         add_car(
                             car['brand'], 
                             car['model'], 
@@ -1453,14 +1432,12 @@ class CarCatalogPage(QWidget):
 
     def load_cars(self):
         try:
-            # Очищаем предыдущие карточки
             for i in reversed(range(self.cards_layout.count())): 
                 widget = self.cards_layout.itemAt(i).widget()
                 if widget:
                     widget.setParent(None)
             
             cars = get_available_cars()
-            print(f"✅ Загружено {len(cars)} автомобилей")
             
             if not cars:
                 no_cars_label = QLabel("В НАСТОЯЩЕЕ ВРЕМЯ НЕТ ДОСТУПНЫХ АВТОМОБИЛЕЙ")
@@ -1476,11 +1453,9 @@ class CarCatalogPage(QWidget):
                     car_card = CarCard(car, self.user, self.load_cars)
                     self.cards_layout.addWidget(car_card, row, col)
                 except Exception as e:
-                    print(f"❌ Ошибка создания карточки для {car['brand']} {car['model']}: {e}")
                     continue
                     
         except Exception as e:
-            print(f"❌ Ошибка загрузки автомобилей: {e}")
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
 
 class AllCarsPage(QWidget):
@@ -1590,159 +1565,6 @@ class AllCarsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить автомобили: {str(e)}")
 
-    def create_car_stock_widget(self, car):
-        widget = QWidget()
-        widget.setStyleSheet(f"""
-            QWidget {{
-                background-color: {COLORS['secondary_bg']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 10px;
-                margin: 5px;
-                padding: 15px;
-            }}
-        """)
-        
-        layout = QHBoxLayout(widget)
-        
-        # Информация об автомобиле
-        info_layout = QVBoxLayout()
-        title_label = QLabel(f"{car['brand']} {car['model']} {car['year']}")
-        title_label.setStyleSheet(f"color: {COLORS['text_primary']}; font-size: 16px; font-weight: bold;")
-        
-        price_label = QLabel(f"{car['price']:,.0f} ₽")
-        price_label.setStyleSheet(f"color: {COLORS['accent_green']}; font-size: 14px;")
-        
-        # Поле для названия изображения
-        image_layout = QHBoxLayout()
-        image_label = QLabel("Файл изображения:")
-        image_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        
-        image_input = QLineEdit()
-        image_input.setPlaceholderText(f"{car['brand']}_{car['model']}.jpg")
-        image_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['primary_bg']};
-                color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 5px;
-                padding: 5px;
-                font-size: 12px;
-            }}
-        """)
-        
-        image_layout.addWidget(image_label)
-        image_layout.addWidget(image_input)
-        
-        info_layout.addWidget(title_label)
-        info_layout.addWidget(price_label)
-        info_layout.addLayout(image_layout)
-        
-        # Поле для ввода количества
-        quantity_layout = QHBoxLayout()
-        quantity_label = QLabel("Количество:")
-        quantity_label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 12px;")
-        
-        quantity_spin = QSpinBox()
-        quantity_spin.setRange(1, 100)
-        quantity_spin.setValue(1)
-        quantity_spin.setStyleSheet(f"""
-            QSpinBox {{
-                background-color: {COLORS['primary_bg']};
-                color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 5px;
-                padding: 5px;
-            }}
-        """)
-        
-        quantity_layout.addWidget(quantity_label)
-        quantity_layout.addWidget(quantity_spin)
-        quantity_layout.addStretch()
-        
-        info_layout.addLayout(quantity_layout)
-        
-        # Кнопка добавления
-        btn_add = QPushButton("➕ ДОБАВИТЬ")
-        btn_add.setStyleSheet(f"""
-            QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 {COLORS['accent_green']}, stop:1 {COLORS['accent_teal']});
-                color: {COLORS['text_primary']};
-                border: none;
-                padding: 8px 15px;
-                border-radius: 6px;
-                font-size: 12px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
-                    stop:0 #0ea271, stop:1 #0c857a);
-            }}
-        """)
-        
-        def add_car_stock():
-            quantity = quantity_spin.value()
-            image_filename = image_input.text().strip() or f"{car['brand']}_{car['model']}.jpg"
-            
-            try:
-                import random
-                import time
-                
-                added_count = 0
-                errors = []
-                
-                for i in range(quantity):
-                    try:
-                        # Генерируем уникальный VIN для каждого автомобиля
-                        base_vin = f"{car['brand'][:3]}{car['model'][:3]}"
-                        timestamp = str(int(time.time() * 1000))[-6:]
-                        random_part = str(random.randint(1000, 9999))
-                        unique_vin = base_vin + timestamp + random_part
-                        vin = unique_vin[:17]
-                        
-                        # Добавляем автомобиль с указанием изображения
-                        add_car(
-                            car['brand'], 
-                            car['model'], 
-                            car['year'], 
-                            vin,
-                            "Разные цвета", 
-                            car['price'], 
-                            0
-                        )
-                        added_count += 1
-                        
-                    except Exception as e:
-                        if "UNIQUE KEY" in str(e) or "повторяющийся ключ" in str(e):
-                            continue
-                        else:
-                            errors.append(str(e))
-                
-                if added_count > 0:
-                    if errors:
-                        QMessageBox.information(self, "✅ УСПЕХ (с предупреждениями)", 
-                                            f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!\n\n"
-                                            f"Некоторые ошибки:\n" + "\n".join(errors[:3]))
-                    else:
-                        QMessageBox.information(self, "✅ УСПЕХ", 
-                                            f"Добавлено {added_count} автомобилей {car['brand']} {car['model']}!")
-                else:
-                    QMessageBox.critical(self, "❌ ОШИБКА", 
-                                    f"Не удалось добавить ни одного автомобиля:\n" + "\n".join(errors[:3]))
-                
-                quantity_spin.setValue(1)
-                image_input.clear()
-                
-            except Exception as e:
-                QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось добавить автомобили: {str(e)}")
-        
-        btn_add.clicked.connect(add_car_stock)
-        
-        layout.addLayout(info_layout)
-        layout.addWidget(btn_add)
-        
-        return widget
-
 class RealtimeStatsPage(QWidget):
     def __init__(self, user, back_callback):
         super().__init__()
@@ -1778,7 +1600,6 @@ class RealtimeStatsPage(QWidget):
             ]
             return stats
         except Exception as e:
-            print(f"❌ Ошибка получения статистики: {e}")
             raise Exception(f"Не удалось загрузить статистику: {str(e)}")
 
     def setup_ui(self):
@@ -2020,7 +1841,6 @@ class ReviewsPage(QWidget):
         """)
         title.setAlignment(Qt.AlignCenter)
         
-        # Добавляем информацию о доступных заказах
         orders_info = QLabel("Вы можете оставить отзыв только на свои завершенные заказы")
         orders_info.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 14px; font-family: 'Segoe UI'; margin-bottom: 10px;")
         orders_info.setAlignment(Qt.AlignCenter)
@@ -2231,34 +2051,29 @@ class MyReviewsPage(QWidget):
 
     def load_reviews(self):
         try:
-            # Получаем все отзывы (без указания client_id)
-            reviews = get_client_reviews()  # Теперь работает без параметра
+            reviews = get_client_reviews()  
             
             self.table.setRowCount(len(reviews))
-            self.table.setColumnCount(4)  # Увеличили до 4 колонок
+            self.table.setColumnCount(4)  
             self.table.setHorizontalHeaderLabels(["Клиент", "Оценка", "Отзыв", "Дата"])
             
             for row, review in enumerate(reviews):
-                # Колонка с именем клиента
                 client_name = review.get('client_name', 'Неизвестный клиент')
                 self.table.setItem(row, 0, QTableWidgetItem(client_name))
                 
-                # Колонка с рейтингом (звездочки)
                 rating_stars = "★" * review['rating'] + "☆" * (5 - review['rating'])
                 rating_item = QTableWidgetItem(rating_stars)
                 rating_item.setForeground(QColor(COLORS['accent_green']))
                 self.table.setItem(row, 1, rating_item)
                 
-                # Колонка с комментарием
                 comment = review['comment'] if review['comment'] else "Без комментария"
                 self.table.setItem(row, 2, QTableWidgetItem(comment))
                 
-                # Колонка с датой
                 self.table.setItem(row, 3, QTableWidgetItem(str(review['review_date'])))
             
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            self.table.resizeColumnToContents(0)  # Подгоняем ширину колонки с именем
-            self.table.resizeColumnToContents(1)  # Подгоняем ширину колонки с рейтингом
+            self.table.resizeColumnToContents(0)  
+            self.table.resizeColumnToContents(1)  
             
         except Exception as e:
             QMessageBox.critical(self, "❌ ОШИБКА", f"Не удалось загрузить отзывы: {str(e)}")
@@ -2323,7 +2138,6 @@ class MainWindow(QMainWindow):
     
     def handle_login_success(self, user):
         self.user = user
-        print(f"✅ Вход выполнен: {user['username']} (роль: {user['role']})")
         
         if user['role'] == 'employee' or user['role'] == 'admin':
             self.main_menu = EmployeeMainMenuPage(user, logout_callback=self.show_login)
@@ -2332,17 +2146,13 @@ class MainWindow(QMainWindow):
             
         self.stacked.addWidget(self.main_menu)
         self.stacked.setCurrentWidget(self.main_menu)
-        print("✅ Главное меню загружено")
     
     def show_car_catalog(self):
-        print("🔄 Открытие каталога автомобилей...")
         try:
             self.car_catalog = CarCatalogPage(self.user, back_callback=self.show_main_menu)
             self.stacked.addWidget(self.car_catalog)
             self.stacked.setCurrentWidget(self.car_catalog)
-            print("✅ Каталог автомобилей открыт")
         except Exception as e:
-            print(f"❌ Ошибка открытия каталога: {e}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось открыть каталог: {str(e)}")
     
     def show_manage_stock_page(self):
@@ -2388,5 +2198,4 @@ if __name__ == "__main__":
         window.show()
         sys.exit(app.exec())
     except Exception as e:
-        print(f"❌ Критическая ошибка при запуске: {e}")
         QMessageBox.critical(None, "Ошибка запуска", f"Не удалось запустить приложение:\n{str(e)}")
